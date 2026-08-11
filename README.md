@@ -32,22 +32,52 @@ le poids, le timing, les micro-décalages, tout ce qui fait qu'une animation
 aujourd'hui avec une captation propre. C'est aussi la partie la plus technique
 et elle est faite : voir [`linen/retarget/`](linen/retarget/).
 
-**3. Prompt → animation « AAA », gratuit — oui *à condition* de comprendre où
-la qualité est réellement produite.**
+**3. Prompt → animation — la technologie existe et elle est bonne. Elle n'est
+simplement ni gratuite ni faite avec un LLM.**
 
-Le point dur, dit franchement : **un LLM ne génère pas de mouvement.** Demander
-à Gemini, DeepSeek, Kimi ou Grok des angles articulaires image par image donne
-du bruit — ces modèles n'ont pas de représentation interne du mouvement humain,
-et une animation à 30 fps sur 15 articulations, c'est ~5 400 nombres corrélés
-par seconde qu'il faudrait sortir en tokens. Ça ne marche pas, quel que soit le
-modèle, gratuit ou payant. Tout projet qui promet « prompt → animation AAA » via
-une simple API LLM ment ou fait autre chose en coulisses.
+Il faut distinguer deux choses que le mot « IA » confond.
 
-Ce qui marche, et ce que fait Linen : **le LLM dirige, il n'anime pas.** Le
-modèle reçoit un vocabulaire de poses et de cycles, et renvoie un *plan* —
-quelle pose à quel instant, avec quel easing, quelle énergie. Un synthétiseur
-déterministe fait le reste. La qualité vient alors de trois choses qui sont
-toutes gratuites et sous notre contrôle :
+**Les modèles de diffusion de mouvement — ça marche, pour de vrai.**
+[DeepMotion SayMotion](https://www.deepmotion.com/saymotion) et
+[NoCapMocap](https://www.nocapmocap.com/roblox) font exactement ce que tu
+décris, et NoCapMocap vise précisément Roblox R15, avec un plugin Studio
+gratuit pour l'import en un clic. Leur API publique est documentée
+([openapi.json](https://www.nocapmocap.com/openapi.json)) et le paramètre
+`cfgScale` de leur endpoint `/api/generate` est une échelle de *classifier-free
+guidance* : c'est la signature d'un **modèle de diffusion**, entraîné sur une
+bibliothèque de mocap. Pas un LLM.
+
+**Un LLM de chat, lui, ne génère pas de mouvement.** Demander à Gemini,
+DeepSeek, Kimi ou Grok des angles articulaires image par image donne du bruit :
+ces modèles n'ont pas de représentation interne du mouvement humain, et une
+animation à 30 fps sur 15 articulations, c'est ~5 400 nombres corrélés par
+seconde à sortir en tokens. Ça ne marche pas, quel que soit le modèle, gratuit
+ou payant.
+
+Donc la contrainte réelle n'est pas technique, elle est économique. Les deux
+services ci-dessus fonctionnent au **crédit**, avec un plafond de **10 secondes
+par génération**. Le « gratuit » du cahier des charges ne tombe pas là.
+
+Il tombe ici : **les mêmes modèles de diffusion existent en open source et
+tournent en local** — [MoMask](https://github.com/EricGuo5513/momask-codes),
+MDM, et la génération suivante. Même famille de technologie, zéro crédit, zéro
+plafond. C'est ça, la vraie réponse à « prompt → animation, gratuit, sans
+sacrifier la qualité ».
+
+**Ce que Linen fait de tout ça.** Deux choses, et pas de concurrence frontale :
+
+- **Il ingère leur sortie.** `linen bvh` prend un BVH — export SayMotion, MoMask
+  ou MDM lancé en local, téléchargement Mixamo — et le recible sur R15/R6 avec
+  le même solveur, les mêmes conventions et le même exporteur que la voie
+  FreeMoCap. Un test vérifie que les deux chemins donnent la même chose sur la
+  même pose. Linen est le tuyau, pas un concurrent du modèle.
+- **Il fournit une voie 100 % hors ligne**, pour quand il n'y a ni crédit ni
+  GPU : **le LLM dirige, il n'anime pas.** Le modèle reçoit un vocabulaire de
+  poses et de cycles et renvoie un *plan* — quelle pose à quel instant, avec
+  quel easing, quelle énergie. Un synthétiseur déterministe fait le reste.
+
+Sur cette seconde voie, la qualité vient de trois choses toutes gratuites et
+sous notre contrôle :
 
 - **les poses clés**, écrites à la main une fois pour toutes
   ([`posebook.py`](linen/generate/posebook.py)) — ou capturées avec FreeMoCap,
@@ -58,12 +88,13 @@ toutes gratuites et sous notre contrôle :
   littéralement les principes d'animation Disney appliqués aux transitions.
 
 Résultat honnête : on obtient des animations propres, lisibles, qui tiennent
-sans problème dans un jeu Roblox. On n'obtient pas un cascadeur de Naughty Dog
-depuis une phrase. Pour s'en approcher, le chemin est de nourrir la banque de
-poses avec vos propres captations FreeMoCap — les deux moitiés du projet se
-rejoignent là.
+sans problème dans un jeu Roblox. C'est en dessous d'un modèle de diffusion
+dédié sur du mouvement complexe — un modèle entraîné sur des milliers d'heures
+de mocap trouve des transitions qu'aucun vocabulaire écrit à la main ne
+contient. En revanche c'est déterministe, illimité, relisible et modifiable, ce
+qu'aucun des deux services n'offre.
 
-**Sur le « gratuit ».** Les clés citées donnent des *free tiers*, pas de
+**Sur le « gratuit » des clés LLM.** Ce sont des *free tiers*, pas de
 l'illimité. Gemini est le plus généreux (palier gratuit permanent, sans carte).
 Le reste tourne entre quotas journaliers et crédits promotionnels. Linen essaie
 les fournisseurs en chaîne et passe au suivant sur un refus. Et comme le LLM ne
@@ -71,6 +102,14 @@ produit qu'un plan JSON de quelques centaines d'octets, une animation coûte *un
 appel : même un quota gratuit serré tient largement. La synthèse, elle, est
 locale et gratuite pour de bon — `linen synth` sur un plan écrit à la main ne
 touche jamais le réseau.
+
+### En résumé, trois sources pour la même sortie
+
+| Source | Qualité | Coût | Quand |
+| --- | --- | --- | --- |
+| `linen retarget` — capture FreeMoCap | La meilleure | Gratuit | Tu peux filmer le mouvement |
+| `linen bvh` — SayMotion, NoCapMocap, MoMask/MDM local | Très bonne | Crédits, ou gratuit en local | Tu ne peux pas filmer |
+| `linen prompt` / `linen synth` — plan + poses | Correcte, déterministe | Gratuit | Ni caméra, ni crédit, ni GPU |
 
 ---
 
@@ -103,6 +142,28 @@ linen retarget recording/output_data/mediapipe_body_3d_xyz.npy \
 Le recalage est **uniquement rotationnel**, donc indépendant de la taille du
 sujet : quelqu'un de 1,55 m et quelqu'un de 1,95 m pilotent le même rig sans
 calibration.
+
+### Ingérer un BVH généré ailleurs
+
+```bash
+linen bvh saymotion_export.bvh --units cm --rig R15 -o dance.rbxmx
+```
+
+Marche avec tout squelette humanoïde nommé à la Mixamo — ce qui couvre les
+exports SayMotion, les sorties MoMask / MDM converties depuis HumanML3D, et les
+téléchargements Mixamo. `--skeleton` accepte `mixamo`, `smpl`, `humanml3d`,
+`fbx` (alias du même mapping).
+
+Deux repères que MediaPipe fournit et qu'un squelette d'animation n'a pas sont
+reconstruits : les **talons** (sous la cheville, à la hauteur des orteils) et les
+**oreilles** (de part et d'autre de la tête, à partir de l'os du cou). Le lacet
+de la tête est perdu au passage et suit le buste — c'est la seule perte connue
+de ce chemin, et elle est testée comme telle.
+
+L'orientation du squelette source n'a pas d'importance : chaque rotation étant
+résolue relativement à son parent, un personnage qui regarde `+Z` donne les
+mêmes rotations locales qu'un qui regarde `-Z`. Seul le root motion cuit le
+remarque.
 
 ### Générer depuis un prompt
 
@@ -160,10 +221,14 @@ une convention d'axe dérive quelque part dans la chaîne, il tombe.
   poignet. Rien à recibler.
 - **Verrouillage des appuis (foot IK).** L'export étant rotationnel, Roblox gère
   la position ; un léger patinage reste possible sur une locomotion rapide.
-- **Text-to-motion neuronal.** Des modèles ouverts (MoMask, MDM) génèrent du
-  mouvement SMPL depuis du texte et tournent en local, donc gratuitement. Ce
-  serait une troisième source de clips, en amont du même recalage. C'est la
-  suite logique, ce n'est pas fait.
+- **Le modèle de diffusion lui-même.** Linen consomme du BVH, il n'en génère
+  pas. Lancer MoMask ou MDM en local reste à ta charge (poids + PyTorch) ; une
+  fois le BVH écrit, `linen bvh` prend le relais. Emballer ça dans une commande
+  `linen generate --local` serait la suite logique.
+- **Un client pour les API payantes.** Rien n'empêche d'appeler
+  `/api/generate` de NoCapMocap ou l'API SayMotion depuis un script et de passer
+  le résultat à `linen bvh` — mais ça demande un compte et des crédits, donc ce
+  n'est pas câblé dans l'outil.
 
 ## Licence
 

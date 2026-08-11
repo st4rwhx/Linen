@@ -21,6 +21,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     _add_retarget(sub)
+    _add_bvh(sub)
     _add_prompt(sub)
     _add_synth(sub)
     sub.add_parser("providers", help="show which LLM providers are configured")
@@ -29,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     handler = {
         "retarget": _cmd_retarget,
+        "bvh": _cmd_bvh,
         "prompt": _cmd_prompt,
         "synth": _cmd_synth,
         "providers": _cmd_providers,
@@ -83,6 +85,28 @@ def _add_retarget(sub) -> None:
     _add_common_output(parser)
 
 
+def _add_bvh(sub) -> None:
+    parser = sub.add_parser(
+        "bvh",
+        help="BVH from any text-to-motion tool -> Roblox animation",
+        description=(
+            "Retarget a humanoid BVH — SayMotion, a locally run MoMask/MDM, a "
+            "Mixamo download — onto a Roblox rig."
+        ),
+    )
+    parser.add_argument("file", type=Path, help="a .bvh file")
+    parser.add_argument("--skeleton", default="mixamo", help="source naming convention")
+    parser.add_argument("--units", default="cm", choices=("mm", "cm", "m"))
+    parser.add_argument(
+        "--fps", type=float, default=None, help="override the file's frame time"
+    )
+    parser.add_argument("--name", default=None)
+    parser.add_argument("--loop", action="store_true")
+    parser.add_argument("--root-motion", action="store_true")
+    parser.add_argument("--smoothing", type=int, default=3)
+    _add_common_output(parser)
+
+
 def _add_prompt(sub) -> None:
     parser = sub.add_parser("prompt", help="text -> motion plan -> Roblox animation")
     parser.add_argument("text", help="what the animation should do")
@@ -119,6 +143,23 @@ def _cmd_retarget(args) -> int:
         track,
         SolveOptions(root_motion=args.root_motion, smoothing_frames=args.smoothing),
         name=args.name or args.recording.stem,
+    )
+    clip.loop = args.loop
+    if args.loop:
+        clip = clip.with_loop_seam()
+    return _write(clip, args)
+
+
+def _cmd_bvh(args) -> int:
+    from .retarget import SolveOptions, solve_clip
+    from .sources import load_bvh
+
+    track = load_bvh(args.file, skeleton=args.skeleton, units=args.units, fps=args.fps)
+    clip = solve_clip(
+        get_rig(args.rig),
+        track,
+        SolveOptions(root_motion=args.root_motion, smoothing_frames=args.smoothing),
+        name=args.name or args.file.stem,
     )
     clip.loop = args.loop
     if args.loop:

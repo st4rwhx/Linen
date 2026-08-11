@@ -3,12 +3,13 @@
 ## Le pipeline
 
 ```
-FreeMoCap (.npy)  ─┐
-                   ├─> AnimationClip ─> réduction ─> .rbxmx (KeyframeSequence)
-prompt ─> plan ────┘                 └─> .json (viewport three.js)
+FreeMoCap (.npy) ──┐
+BVH externe ───────┼─> LandmarkTrack ─> solveur ─┐
+                   │                             ├─> AnimationClip ─┬─> .rbxmx
+prompt ─> plan ────┴──────> synthèse ────────────┘                  └─> .json
 ```
 
-Deux sources, une représentation, deux sorties. `AnimationClip`
+Trois sources, une représentation, deux sorties. `AnimationClip`
 ([`linen/clip.py`](../linen/clip.py)) est le pivot : `fps`, plus un tableau de
 quaternions `(frames, 4)` par part, **locaux au parent et relatifs à la pose de
 repos du rig**. C'est exactement ce que stocke un `Pose.CFrame` Roblox, donc
@@ -19,6 +20,7 @@ l'export est une transcription, pas une conversion.
 | `linen/math3d.py` | Quaternions, matrices, bases orthonormées, easing des rotations |
 | `linen/rigs/` | R15, R6 : topologie, axes, sources de landmarks |
 | `linen/retarget/` | Landmarks → rotations articulaires |
+| `linen/sources/` | BVH et squelettes étrangers → landmarks |
 | `linen/generate/` | Prompt → plan → clip |
 | `linen/export/` | `.rbxmx` pour Studio, `.json` pour le viewport |
 
@@ -87,6 +89,26 @@ tendu le long de son propre axe de flexion — la torsion n'est tout simplement
 pas dans la donnée. Le solveur bascule alors sur la rotation d'arc minimal
 (*swing*) depuis le parent, qui n'invente aucun roll, plutôt que de laisser la
 base tomber sur un axe monde arbitraire et sauter d'une frame à l'autre.
+
+## Pourquoi le solveur travaille sur des positions nommées
+
+Le reciblage ne consomme jamais un tracker, il consomme des **points nommés**.
+C'est ce qui permet à un BVH venu d'ailleurs de devenir une entrée valide avec
+un simple mapping de noms ([`sources/skeletons.py`](../linen/sources/skeletons.py))
+et de traverser exactement le même solveur, les mêmes conventions et le même
+exporteur qu'une captation FreeMoCap. Le test
+`test_bvh_and_freemocap_paths_agree_on_the_same_pose` verrouille cette
+équivalence.
+
+Conséquence directe : le BVH est parsé pour ses **positions**, pas pour ses
+rotations. Un BVH exprime ses rotations contre son propre repos et son propre
+ordre de canaux ; les consommer directement lierait le solveur aux conventions
+de chaque exporteur. On fait donc la cinématique directe et on jette les
+rotations — sauf pour reconstruire les oreilles, faute de mieux.
+
+L'ordre des canaux, lui, est respecté et pas supposé. Un BVH liste presque
+toujours `ZXY` ; l'appliquer comme `XYZ` produit une pose plausible mais fausse,
+que rien en aval ne rattrape. `test_channel_order_is_honoured` couvre ce piège.
 
 ## Réduction de keyframes
 

@@ -67,6 +67,29 @@ def test_zero_tolerance_keeps_every_frame(tmp_path, recording, capsys):
     assert "40 frames -> 40 keyframes" in capsys.readouterr().out
 
 
+def test_bvh_from_a_text_to_motion_tool_becomes_a_roblox_animation(tmp_path, capsys):
+    from test_sources import bvh_text
+
+    source = tmp_path / "generated.bvh"
+    source.write_text(bvh_text())
+    out = tmp_path / "generated.rbxmx"
+
+    assert main(["bvh", str(source), "-o", str(out), "--units", "cm"]) == 0
+    assert out.read_text().startswith("<?xml")
+    assert "generated.rbxmx: R15" in capsys.readouterr().out
+
+
+def test_bvh_with_an_unknown_skeleton_lists_the_known_ones(tmp_path, capsys):
+    from test_sources import bvh_text
+
+    source = tmp_path / "generated.bvh"
+    source.write_text(bvh_text())
+    assert main(
+        ["bvh", str(source), "--skeleton", "openpose", "-o", str(tmp_path / "x.rbxmx")]
+    ) == 1
+    assert "unknown skeleton" in capsys.readouterr().err
+
+
 def test_synth_needs_no_network(tmp_path):
     plan = tmp_path / "plan.json"
     plan.write_text(json.dumps(PLAN))
