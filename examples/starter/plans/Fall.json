@@ -1,0 +1,27 @@
+{
+ "name": "Fall",
+ "fps": 30,
+ "loop": true,
+ "priority": "Movement",
+ "energy": 1.0,
+ "notes": "Boucle de chute libre, tenue tant que le personnage est en l air.",
+ "segments": [
+  {
+   "start": 0.0,
+   "end": 1.2,
+   "pose": "jump_apex",
+   "easing": "ease_in_out"
+  }
+ ],
+ "layers": [
+  {
+   "kind": "noise",
+   "amplitude": 0.9
+  },
+  {
+   "kind": "sway",
+   "amplitude": 0.9,
+   "rate": 0.7
+  }
+ ]
+}

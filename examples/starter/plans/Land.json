@@ -1,0 +1,5 @@
+{"name":"Land","fps":30,"loop":false,"priority":"Action","energy":1.0,
+ "notes":"Reception amortie puis retour debout, avec depassement.",
+ "segments":[{"start":0.0,"end":0.14,"pose":"land","easing":"ease_in","blend_in":0.06},
+             {"start":0.14,"end":0.45,"pose":"stand_relaxed","easing":"overshoot","blend_in":0.26}],
+ "layers":[]}

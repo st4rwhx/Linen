@@ -1,0 +1,23 @@
+{
+ "name": "Sit",
+ "fps": 30,
+ "loop": true,
+ "priority": "Idle",
+ "energy": 1.0,
+ "notes": "Pose assise tenue.",
+ "segments": [
+  {
+   "start": 0.0,
+   "end": 2.5,
+   "pose": "sit",
+   "easing": "ease_in_out"
+  }
+ ],
+ "layers": [
+  {
+   "kind": "breathing",
+   "amplitude": 1.1,
+   "rate": 0.22
+  }
+ ]
+}

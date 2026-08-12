@@ -3,6 +3,10 @@
 Des animations Roblox **R15 / R6** à partir de FreeMoCap — et à partir d'un
 prompt texte, sans coût d'API.
 
+> **Tu débutes sur le projet ?** Commence par
+> **[`docs/DEMARRAGE.md`](docs/DEMARRAGE.md)** : sept animations déjà générées,
+> et un pas-à-pas dans Studio sans une ligne de code. 20 minutes.
+
 ```bash
 # un prompt -> une animation. Aucune clé, aucun GPU, aucun réseau.
 linen prompt "salue de la main gauche puis marche" --planner offline --rig both -o hello.rbxmx

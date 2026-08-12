@@ -1,0 +1,4 @@
+{"name":"Run","fps":30,"loop":true,"priority":"Movement","energy":1.05,
+ "notes":"Deux cycles a 1.6 Hz.",
+ "segments":[{"start":0.0,"end":1.25,"cycle":"run","rate":1.6}],
+ "layers":[]}

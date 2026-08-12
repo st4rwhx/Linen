@@ -1,0 +1,5 @@
+{"name":"Jump","fps":30,"loop":false,"priority":"Movement","energy":1.1,
+ "notes":"Anticipation courte puis detente. Joue au moment de l impulsion.",
+ "segments":[{"start":0.0,"end":0.12,"pose":"crouch","easing":"anticipate","blend_in":0.1},
+             {"start":0.12,"end":0.30,"pose":"jump_takeoff","easing":"ease_out","blend_in":0.08}],
+ "layers":[]}

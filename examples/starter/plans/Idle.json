@@ -1,0 +1,28 @@
+{
+ "name": "Idle",
+ "fps": 30,
+ "loop": true,
+ "priority": "Idle",
+ "energy": 1.0,
+ "notes": "Boucle de repos. La respiration et le balancement evitent la statue.",
+ "segments": [
+  {
+   "start": 0.0,
+   "end": 3.0,
+   "pose": "stand_relaxed",
+   "easing": "ease_in_out"
+  }
+ ],
+ "layers": [
+  {
+   "kind": "breathing",
+   "amplitude": 1.3,
+   "rate": 0.24
+  },
+  {
+   "kind": "sway",
+   "amplitude": 0.8,
+   "rate": 0.17
+  }
+ ]
+}
