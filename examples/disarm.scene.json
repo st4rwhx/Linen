@@ -1,11 +1,11 @@
 {
   "name": "Disarm",
   "fps": 30,
-  "notes": "Le scénario complet : Hero désarme Thug, le pistolet part au mur, la caméra suit l'impact et revient, puis la réplique. Tout est ancré sur le cue 'disarm' — retime-le et l'ensemble suit.",
+  "notes": "Le scénario complet : Hero désarme Thug, le pistolet part au mur, la caméra suit l'impact et revient, puis la réplique. Tout est ancré sur le cue 'disarm' — retime-le et l'ensemble suit. Aucun événement 'sound' ici : les impacts, les pas et l'ambiance sont repérés automatiquement, et les identifiants se collent dans Disarm.audio.json.",
 
   "actors": [
     { "name": "Hero", "rig": "R15", "position": [0, 2.44, 0], "facing": "Thug" },
-    { "name": "Thug", "rig": "R15", "position": [0, 2.44, -4], "facing": "Hero" }
+    { "name": "Thug", "rig": "R15", "position": [0, 2.44, -2.4], "facing": "Hero" }
   ],
 
   "props": [
@@ -31,21 +31,17 @@
 
   "events": [
     { "kind": "prop",   "cue": "disarm", "offset": 0.14, "actor": "Thug", "prop": "Pistol", "action": "throw", "impulse": [0, 3.43, -3.94] },
-    { "kind": "sound",  "cue": "disarm", "offset": 0.14, "actor": "Hero", "asset": "rbxassetid://0", "volume": 1 },
 
     { "kind": "camera", "cue": "disarm", "offset": 0.34, "shot": "wall" },
     { "kind": "vfx",    "cue": "disarm", "offset": 0.46, "effect": "WallImpact", "at_part": "Wall" },
-    { "kind": "sound",  "cue": "disarm", "offset": 0.46, "asset": "rbxassetid://0", "volume": 0.8 },
     { "kind": "camera", "cue": "disarm", "offset": 0.90, "shot": "two_shot" },
 
     { "kind": "face",   "cue": "settle", "offset": 0.10, "actor": "Hero", "expression": "smug", "hold": 3.0 },
     { "kind": "camera", "cue": "settle", "offset": 0.25, "shot": "hero_cu" },
     { "kind": "line",   "cue": "settle", "offset": 0.35, "actor": "Hero", "text": "Hahaha, you couldn't even swing me!", "hold": 2.2 },
-    { "kind": "sound",  "cue": "settle", "offset": 0.35, "actor": "Hero", "asset": "rbxassetid://0" },
 
     { "kind": "face",   "cue": "recoil", "offset": 0.05, "actor": "Thug", "expression": "afraid", "hold": 2.5 },
     { "kind": "camera", "cue": "settle", "offset": 2.00, "shot": "two_shot" },
-    { "kind": "line",   "cue": "settle", "offset": 2.10, "actor": "Thug", "text": "Nooo...", "hold": 1.5 },
-    { "kind": "sound",  "cue": "settle", "offset": 2.10, "actor": "Thug", "asset": "rbxassetid://0" }
+    { "kind": "line",   "cue": "settle", "offset": 2.10, "actor": "Thug", "text": "Nooo...", "hold": 1.5 }
   ]
 }

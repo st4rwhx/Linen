@@ -230,6 +230,21 @@ def _add_scene(sub) -> None:
     )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
+        "--audio",
+        type=Path,
+        default=None,
+        help=(
+            "slot -> audio id mapping (default: <out>/<scene>.audio.json). Linen "
+            "spots the scene, writes every sound it needs into this file, and "
+            "keeps whatever ids you have already pasted in."
+        ),
+    )
+    parser.add_argument(
+        "--no-audio",
+        action="store_true",
+        help="skip spotting entirely: no derived impacts, footsteps or ambience",
+    )
+    parser.add_argument(
         "--tolerance", type=float, default=1.0, help="keyframe reduction, in degrees"
     )
     parser.add_argument(
@@ -357,6 +372,18 @@ def _cmd_scene(args) -> int:
 
     built = build_scene(scene, planner=args.planner, seed=args.seed)
 
+    # Spotting comes before the clips are written, because it adds markers to
+    # them: a derived footstep rides the animation exactly like an authored
+    # event does, and is frame-exact for the same reason.
+    from .scene import apply_spotting, read_mapping, spot_scene, write_mapping
+
+    audio_path = args.audio or (args.out / f"{scene.name}.audio.json")
+    mapping = {} if args.no_audio else read_mapping(audio_path)
+    sheet = None
+    if not args.no_audio:
+        sheet = spot_scene(built, mapping=mapping)
+        apply_spotting(built, sheet)
+
     print(
         f"{scene.name}: {len(scene.actors)} actors, {len(built.schedule)} cues, "
         f"{built.duration:.2f}s"
@@ -391,7 +418,11 @@ def _cmd_scene(args) -> int:
               f"(camera, effets de decor)")
 
     script = write_scene_script(
-        built, args.out / f"{scene.name}.server.luau", folder=args.folder
+        built,
+        args.out / f"{scene.name}.server.luau",
+        folder=args.folder,
+        sheet=sheet,
+        mapping=mapping,
     )
     print(f"{script}: staging and playback script")
 
@@ -403,6 +434,16 @@ def _cmd_scene(args) -> int:
     print(f"{blockout_path}: blockout du decor (placeholders gris, positions calculees)")
     print()
     print(set_plan.sheet())
+
+    if sheet is not None:
+        written = write_mapping(sheet, audio_path)
+        filled = sum(1 for slot in sheet.used() if mapping.get(slot.name) or slot.default)
+        print()
+        print(sheet.sheet())
+        print()
+        print(f"{written}: {filled}/{len(sheet.used())} slots remplis — "
+              f"colle les identifiants manquants, puis relance la meme commande")
+
     print(f"import the .rbxmx files into {args.folder}, then run the script in Studio")
     return 0
 

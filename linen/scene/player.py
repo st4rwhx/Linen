@@ -20,6 +20,7 @@ from __future__ import annotations
 BODY = '''\
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
 local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
 
 -- "ServerStorage.LinenAnimations" and friends. The first segment may be a
@@ -178,7 +179,37 @@ local function playEffect(effectName: string, atPart: string)
 end
 
 -- ------------------------------------------------------------------ sound --
-local function playSound(asset: string, volume: number, at: Instance?)
+-- Two buses, so the score can duck under the effects and both can be ridden by
+-- one number. This is the smallest thing that behaves like a mixer, and every
+-- sound below goes through it rather than straight to Workspace.
+local sfxBus = Instance.new("SoundGroup")
+sfxBus.Name = "LinenSFX"
+sfxBus.Volume = 1
+sfxBus.Parent = SoundService
+
+local musicBus = Instance.new("SoundGroup")
+musicBus.Name = "LinenMusic"
+musicBus.Volume = 1
+musicBus.Parent = SoundService
+
+-- The tremor. TremoloSoundEffect varies a bus's volume up and down; at low
+-- depth it is an unsteadiness you feel rather than hear, which is what a
+-- character in trouble should sound like. Depth rides the tension curve.
+local tremor = Instance.new("TremoloSoundEffect")
+tremor.Frequency = 5.2
+tremor.Duty = 0.6
+tremor.Depth = 0
+tremor.Parent = musicBus
+
+-- And the tunnel: as tension climbs, the top end comes off the world and the
+-- bottom swells. It is the oldest trick there is and it works every time.
+local tunnel = Instance.new("EqualizerSoundEffect")
+tunnel.LowGain = 0
+tunnel.MidGain = 0
+tunnel.HighGain = 0
+tunnel.Parent = sfxBus
+
+local function playSound(asset: string, volume: number, at: Instance?, group: SoundGroup?)
 \tif asset == "" or asset == "rbxassetid://0" then
 \t\ttable.insert(missing, "un identifiant audio est encore à 0")
 \t\treturn
@@ -186,8 +217,43 @@ local function playSound(asset: string, volume: number, at: Instance?)
 \tlocal sound = Instance.new("Sound")
 \tsound.SoundId = asset
 \tsound.Volume = volume
+\tsound.SoundGroup = group or sfxBus
 \t-- Parented to a part, Roblox makes it positional on its own.
 \tsound.Parent = if at and at:IsA("BasePart") then at else workspace
+\tsound:Play()
+\tsound.Ended:Once(function()
+\t\tsound:Destroy()
+\tend)
+end
+
+-- ----------------------------------------------------------------- spotted --
+-- Sounds Linen derived from the animation itself: impacts, footsteps, falls.
+-- The intensity travelling with each one is what keeps repeated hits from
+-- sounding like a stapler — one sample played at one level is the single most
+-- recognisable sign of unfinished game audio.
+local function playSpot(slot: string, intensity: number, partName: string, actorName: string?)
+\tlocal entry = SOUNDS[slot]
+\tif entry == nil or entry.asset == "" then
+\t\treturn -- Nothing mapped to this slot yet; the sheet already said so.
+\tend
+
+\tlocal host: Instance? = nil
+\tlocal model = if actorName then models[actorName] else nil
+\tif model and partName ~= "" then
+\t\thost = model:FindFirstChild(partName)
+\tend
+\tif host == nil and partName ~= "" then
+\t\thost = workspace:FindFirstChild(partName, true)
+\tend
+
+\tlocal sound = Instance.new("Sound")
+\tsound.SoundId = entry.asset
+\tsound.Volume = entry.volume * (0.45 + 0.55 * intensity)
+\t-- Harder hits sit lower, and a little jitter keeps two identical frames
+\t-- from sounding identical.
+\tsound.PlaybackSpeed = 1.06 - 0.12 * intensity + (math.random() - 0.5) * 0.08
+\tsound.SoundGroup = if entry.category == "MUS" then musicBus else sfxBus
+\tsound.Parent = if host and host:IsA("BasePart") then host else workspace
 \tsound:Play()
 \tsound.Ended:Once(function()
 \t\tsound:Destroy()
@@ -291,6 +357,8 @@ local function fire(kind: string, value: string, actorName: string?)
 \tif kind == "sound" then
 \t\tlocal model = if actorName then models[actorName] else nil
 \t\tplaySound(parts[1] or "", 1, model and model:FindFirstChild("Head"))
+\telseif kind == "spot" then
+\t\tplaySpot(parts[1] or "", tonumber(parts[2]) or 1, parts[3] or "", actorName)
 \telseif kind == "vfx" then
 \t\tplayEffect(parts[1] or "", parts[2] or "")
 \telseif kind == "face" then
@@ -350,7 +418,7 @@ for _, entry in STAGE do
 
 \t-- The clip carries its own events. One connection per kind is enough: the
 \t-- marker's value says what to do.
-\tfor _, kind in { "sound", "vfx", "face", "line", "prop", "camera" } do
+\tfor _, kind in { "sound", "spot", "vfx", "face", "line", "prop", "camera" } do
 \t\tlocal actorName = entry.name
 \t\ttrack:GetMarkerReachedSignal("linen_" .. kind):Connect(function(value: string)
 \t\t\tfire(kind, value, actorName)
@@ -389,10 +457,85 @@ task.spawn(function()
 \tend
 end)
 
+-- --------------------------------------------------------------- ambience --
+-- The beds, and the one number they all ride. Linen sampled the scene's
+-- tension while spotting it; here that curve becomes volume on the drone, depth
+-- on the tremor, and the low-pass that closes in when things get bad. Nothing
+-- below is authored frame by frame — it is all the same curve, read live.
+local function tensionAt(seconds: number): number
+\tif #TENSION == 0 then
+\t\treturn 0
+\tend
+\tlocal last = TENSION[#TENSION]
+\tif seconds >= last[1] then
+\t\treturn last[2]
+\tend
+\tfor i = 1, #TENSION - 1 do
+\t\tlocal a, b = TENSION[i], TENSION[i + 1]
+\t\tif seconds < b[1] then
+\t\t\tlocal span = b[1] - a[1]
+\t\t\tlocal alpha = if span > 0 then (seconds - a[1]) / span else 0
+\t\t\treturn a[2] + (b[2] - a[2]) * alpha
+\t\tend
+\tend
+\treturn last[2]
+end
+
+local beds: { { bed: any, sound: Sound } } = {}
+for _, bed in AMBIENCE do
+\tlocal entry = SOUNDS[bed.slot]
+\tif entry == nil or entry.asset == "" then
+\t\tcontinue
+\tend
+\tlocal sound = Instance.new("Sound")
+\tsound.SoundId = entry.asset
+\tsound.Looped = true
+\tsound.Volume = 0
+\tsound.SoundGroup = if entry.category == "MUS" then musicBus else sfxBus
+\tsound.Parent = SoundService
+\ttable.insert(beds, { bed = bed, sound = sound })
+end
+
+task.spawn(function()
+\tlocal elapsed = 0
+\twhile elapsed < DURATION + 1 do
+\t\telapsed += RunService.Heartbeat:Wait()
+\t\tlocal tension = tensionAt(elapsed)
+
+\t\tfor _, held in beds do
+\t\t\tlocal bed, sound = held.bed, held.sound
+\t\t\tlocal inside = elapsed >= bed.start and elapsed <= bed.stop
+\t\t\tif inside and not sound.IsPlaying then
+\t\t\t\tsound:Play()
+\t\t\telseif not inside and sound.IsPlaying then
+\t\t\t\tsound:Stop()
+\t\t\tend
+\t\t\tif inside then
+\t\t\t\tlocal entry = SOUNDS[bed.slot]
+\t\t\t\tlocal reach = bed.low + (bed.high - bed.low) * tension
+\t\t\t\t-- Eased rather than set, so a spike in the curve does not click.
+\t\t\t\tlocal target = (entry and entry.volume or 0.5) * reach
+\t\t\t\tsound.Volume += (target - sound.Volume) * 0.08
+\t\t\tend
+\t\tend
+
+\t\ttremor.Depth = math.clamp((tension - 0.35) / 0.65, 0, 1) * 0.5
+\t\ttunnel.HighGain = -18 * math.clamp((tension - 0.4) / 0.6, 0, 1)
+\t\ttunnel.LowGain = 5 * math.clamp((tension - 0.4) / 0.6, 0, 1)
+\tend
+
+\tfor _, held in beds do
+\t\theld.sound:Stop()
+\t\theld.sound:Destroy()
+\tend
+\tsfxBus:Destroy()
+\tmusicBus:Destroy()
+end)
+
 task.delay(DURATION + 1, function()
 \tcamera.CameraType = originalCameraType
 end)
 
-print(string.format("Linen: %q — %d acteurs, %.2fs, %d cues, %d evenements.",
-\tSCENE_NAME, #tracks, DURATION, #CUES, #DIRECTOR))
+print(string.format("Linen: %q — %d acteurs, %.2fs a %g fps, %d cues, %d evenements, %d nappes.",
+\tSCENE_NAME, #tracks, DURATION, FPS, #CUES, #DIRECTOR, #beds))
 '''

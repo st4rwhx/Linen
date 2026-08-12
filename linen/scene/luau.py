@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .audio import SpottingSheet
 from .build import BuiltScene
 from .player import BODY
 
@@ -29,7 +30,13 @@ HEADER = """\
 """
 
 
-def scene_script(built: BuiltScene, *, folder: str = "ServerStorage.LinenAnimations") -> str:
+def scene_script(
+    built: BuiltScene,
+    *,
+    folder: str = "ServerStorage.LinenAnimations",
+    sheet: SpottingSheet | None = None,
+    mapping: dict[str, str] | None = None,
+) -> str:
     scene = built.scene
     lines: list[str] = [HEADER.format(name=scene.name, folder=folder), ""]
 
@@ -38,7 +45,9 @@ def scene_script(built: BuiltScene, *, folder: str = "ServerStorage.LinenAnimati
     lines.append(f"local FPS = {scene.fps:g}")
     lines.append(f"local DURATION = {built.duration:.4f}")
     lines.append("")
-    lines.append("local STAGE = {")
+    lines.append(
+        "local STAGE: { { name: string, rig: string, position: Vector3, facing: any } } = {"
+    )
     for actor in scene.actors:
         x, y, z = actor.position
         facing = _facing_literal(actor.facing)
@@ -49,7 +58,10 @@ def scene_script(built: BuiltScene, *, folder: str = "ServerStorage.LinenAnimati
     lines.append("}")
     lines.append("")
     lines.append("-- Cue sheet, for reference when retiming by hand.")
-    lines.append("local CUES = {")
+    lines.append(
+        "local CUES: { { id: string, actor: string, start: number, stop: number, "
+        "what: string } } = {"
+    )
     for entry in built.schedule:
         summary = _escape((entry.cue.prompt or entry.plan.name)[:60])
         lines.append(
@@ -60,7 +72,10 @@ def scene_script(built: BuiltScene, *, folder: str = "ServerStorage.LinenAnimati
     lines.append("}")
     lines.append("")
 
-    lines.append("local SHOTS = {")
+    lines.append(
+        "local SHOTS: { { id: string, position: Vector3, lookAt: string, fov: number, "
+        "blend: number, drift: Vector3 } } = {"
+    )
     for shot in scene.shots:
         x, y, z = shot.position
         dx, dy, dz = shot.drift
@@ -72,7 +87,10 @@ def scene_script(built: BuiltScene, *, folder: str = "ServerStorage.LinenAnimati
     lines.append("}")
     lines.append("")
 
-    lines.append("local PROPS = {")
+    lines.append(
+        "local PROPS: { { name: string, source: string, heldBy: string?, "
+        "attachTo: string, grip: Vector3 } } = {"
+    )
     for prop in scene.props:
         gx, gy, gz = prop.grip
         held = f'"{_escape(prop.held_by)}"' if prop.held_by else "nil"
@@ -85,7 +103,9 @@ def scene_script(built: BuiltScene, *, folder: str = "ServerStorage.LinenAnimati
     lines.append("")
 
     lines.append("-- Events with no actor: camera cuts and world effects.")
-    lines.append("local DIRECTOR = {")
+    lines.append(
+        "local DIRECTOR: { { at: number, kind: string, value: string, actor: string? } } = {"
+    )
     for when, event in built.director:
         actor = f'"{_escape(event.actor)}"' if event.actor else "nil"
         lines.append(
@@ -103,8 +123,52 @@ def scene_script(built: BuiltScene, *, folder: str = "ServerStorage.LinenAnimati
     lines.append("}")
     lines.append("")
 
+    lines.extend(_audio_tables(sheet, mapping or {}))
     lines.append(BODY)
     return "\n".join(lines)
+
+
+def _audio_tables(sheet: SpottingSheet | None, mapping: dict[str, str]) -> list[str]:
+    """The soundtrack: which asset per slot, which beds, and the tension curve.
+
+    Emitted even when nothing was spotted, so the player can reference the
+    tables unconditionally rather than guarding every use.
+    """
+    lines: list[str] = []
+    lines.append("-- Slot -> asset. Edit <Scene>.audio.json and rebuild, not this file.")
+    lines.append(
+        "local SOUNDS: { [string]: { asset: string, volume: number, category: string } } = {"
+    )
+    for slot in sheet.used() if sheet else []:
+        asset = mapping.get(slot.name) or slot.default or ""
+        lines.append(
+            f'\t["{_escape(slot.name)}"] = {{ asset = "{_escape(asset)}", '
+            f'volume = {slot.base_volume:g}, category = "{slot.category}" }},'
+        )
+    lines.append("}")
+    lines.append("")
+
+    lines.append("-- Beds held across a span; their volume rides the tension curve.")
+    lines.append(
+        "local AMBIENCE: { { slot: string, start: number, stop: number, "
+        "low: number, high: number } } = {"
+    )
+    for bed in sheet.ambience if sheet else []:
+        lines.append(
+            f'\t{{ slot = "{_escape(bed.slot)}", start = {bed.start:.3f}, '
+            f"stop = {bed.stop:.3f}, low = {bed.low:g}, high = {bed.high:g} }},"
+        )
+    lines.append("}")
+    lines.append("")
+
+    lines.append("-- How wound-up the scene is, 0-1, sampled across the take. One")
+    lines.append("-- number the whole soundtrack reads: drone volume, tremor depth, filter.")
+    lines.append("local TENSION: { { number } } = {")
+    for when, value in sheet.tension if sheet else []:
+        lines.append(f"\t{{ {when:.3f}, {value:g} }},")
+    lines.append("}")
+    lines.append("")
+    return lines
 
 
 #: A small, deliberate subset of the 50 FACS poses — enough to read at Roblox
@@ -123,11 +187,16 @@ _FACS: dict[str, dict[str, float]] = {
 
 
 def write_scene_script(
-    built: BuiltScene, path: str | Path, *, folder: str = "ServerStorage.LinenAnimations"
+    built: BuiltScene,
+    path: str | Path,
+    *,
+    folder: str = "ServerStorage.LinenAnimations",
+    sheet: SpottingSheet | None = None,
+    mapping: dict[str, str] | None = None,
 ) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(scene_script(built, folder=folder))
+    path.write_text(scene_script(built, folder=folder, sheet=sheet, mapping=mapping))
     return path
 
 

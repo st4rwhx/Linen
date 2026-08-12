@@ -29,6 +29,23 @@ def forward_kinematics(
     ``pose`` maps part names to XYZ Euler degrees, as the pose book stores them;
     parts it omits stay at rest. Returns part name to ``(position, rotation)``
     in studs, with the root at the origin.
+    """
+    return place_rotations(
+        rig,
+        {
+            name: euler_degrees_to_quat(np.array(angles, dtype=float))
+            for name, angles in pose.items()
+        },
+    )
+
+
+def place_rotations(
+    rig: RigDefinition, rotations: dict[str, np.ndarray]
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Place every part of ``rig``, from local rotations given as quaternions.
+
+    This is the form a clip stores, so walking a whole animation frame by frame
+    goes through here rather than converting to Euler angles and back.
 
     The chain is the same one the viewport draws: a joint frame at the pivot
     that the pose rotates, then the part's centre offset within it. Rotating
@@ -37,8 +54,8 @@ def forward_kinematics(
     placed: dict[str, tuple[np.ndarray, np.ndarray]] = {}
 
     for part in rig.parts:
-        angles = pose.get(part.name, (0.0, 0.0, 0.0))
-        local = quat_to_mat(euler_degrees_to_quat(np.array(angles, dtype=float)))
+        quat = rotations.get(part.name)
+        local = np.eye(3) if quat is None else quat_to_mat(np.asarray(quat, dtype=float))
 
         if part.parent is None:
             placed[part.name] = (np.zeros(3), local)

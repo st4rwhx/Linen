@@ -222,7 +222,7 @@ RigLimits.rigs["R15"] = {
 			maxTorque = 3000,
 		},
 	},
-}
+} :: RigSpec
 
 RigLimits.rigs["R6"] = {
 	parts = {
@@ -305,7 +305,7 @@ RigLimits.rigs["R6"] = {
 			maxTorque = 12000,
 		},
 	},
-}
+} :: RigSpec
 
 function RigLimits.get(rigName: string): RigSpec?
 	return RigLimits.rigs[rigName]

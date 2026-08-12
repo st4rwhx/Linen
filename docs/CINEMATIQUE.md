@@ -124,22 +124,35 @@ erreur. C'est voulu : la scène reste valide, tu ajoutes les têtes quand tu veu
 
 ---
 
-## Le son, et ElevenLabs
+## Le son : tu ne places rien à la main
 
-Ton idée est bonne, avec une nuance importante.
+Détaillé dans [`docs/SON.md`](SON.md). Le résumé :
 
-**Ce qui marche :** tu génères le dialogue et les bruitages sur ElevenLabs, tu
-les uploades sur Roblox, tu récupères les `rbxassetid://`, et tu les mets dans
-le champ `asset` de l'événement. Le timing est géré par l'ancrage — tu n'as
-jamais à compter des frames.
+Linen fait la **spotting session** tout seul — le nom que le cinéma donne à la
+séance où on marque chaque endroit qui a besoin d'un son. Il n'a pas besoin que
+tu le lui dises, parce que l'image est déjà dans le fichier : les clips
+contiennent la rotation de chaque partie sur chaque frame, donc la cinématique
+directe donne la position des deux poings et des deux pieds sur chaque frame de
+la prise.
 
-**Ce qui ne marche pas :** laisser Linen « choisir » un son. Le planificateur ne
-peut pas inventer un asset ID. Le bon partage est :
+Un poing qui accélère puis freine brutalement à 0,7 stud du torse d'en face,
+c'est un coup qui touche — et la frame où ça arrive est une mesure, pas une
+estimation. Une semelle qui atteint le bas de sa course près du sol, c'est un
+pas.
 
-- **toi** : tu génères et uploades les sons, tu notes les IDs ;
-- **le modèle** : il place les événements sonores aux bons instants et te dit
-  *quel type* de son il attend à chaque endroit (`notes`) ;
-- **Linen** : il garantit que ça tombe à la frame près.
+Il en sort une **conduite son** : des slots nommés (`punch_impact`, `footstep`,
+`tension_drone`, `heartbeat`…), les instants exacts où chacun se déclenche, une
+description de ce qu'il faut, et les mots-clés pour le trouver dans le Creator
+Store. Tu colles les identifiants **une fois** dans `<Scène>.audio.json` ; ils
+survivent à toutes les régénérations suivantes.
+
+Trois slots sont déjà remplis avec des fichiers **livrés dans le client Roblox**
+(`rbxasset://sounds/…`) : rien à uploader, rien à faire modérer, la scène fait
+du bruit immédiatement.
+
+**Ce qui reste à toi :** trouver les sons. Linen ne peut pas inventer un asset
+ID. Tes rendus ElevenLabs vont dans le slot `dialogue`, une piste par réplique,
+listées dans l'ordre.
 
 > Roblox modère les audios uploadés, et les sons de plus de 6 secondes sont
 > restreints selon ton compte. Uploade tôt, ne découvre pas ça la veille.
@@ -197,11 +210,33 @@ une session de débogage dans Studio.
 | Une animation par acteur, sans dérive | **Fait et testé** |
 | Marqueurs d'événements frame-exacts dans le `.rbxmx` | **Fait et testé** |
 | Format de scène : props, plans, son, VFX, visages, répliques | **Fait et testé** |
+| Feuille de plateau + blockout du décor | **Fait et testé** |
+| Repérage son : impacts, pas, chutes, objets, répliques | **Fait et testé** |
+| Courbe de tension, nappes, tremblement, filtre | **Fait et testé** |
 | Écrire la scène depuis un prompt (LLM) | **Fait**, non exécuté faute de modèle ici |
 | Script Studio : mise en place + lecture synchrone | **Fait**, jamais exécuté |
-| Script Studio : caméra, props, VFX, visages, répliques | **Pas encore** — c'est la prochaine étape |
+| Script Studio : caméra, props, VFX, visages, répliques | **Fait**, jamais exécuté |
+| Script Studio : bus audio, sons repérés, ambiance | **Fait**, jamais exécuté |
 | Visualiseur 3D interactif | **Pas encore** |
 | Décor généré | **Non, et ce n'est pas prévu** |
 
-Rien de ce qui touche à Studio n'a encore tourné une seule fois. C'est le risque
-numéro un du projet, et il grossit à chaque brique ajoutée.
+Rien de ce qui touche à Studio n'a encore **tourné** une seule fois. C'est le
+risque numéro un du projet.
+
+Un cran a néanmoins été gagné : tout le Luau généré passe maintenant par le
+**compilateur Luau officiel** et par `luau-analyze` en mode strict. Les scripts
+de scène compilent et ne produisent aucune erreur de type autre que les globales
+Roblox, qui n'existent pas hors de Studio. Ça a immédiatement attrapé deux vrais
+défauts : une scène sans props ou sans plans émettait des tables vides non
+typées, que Luau refuse d'itérer en mode strict ; et chaque bloc de rig généré
+dans `RigLimits.luau` était rouge parce que `kind` s'inférait en `string` au lieu
+de l'union `"ball" | "hinge" | "fixed"`.
+
+« Ça compile » n'est pas « ça marche ». Mais « ça ne compile pas » aurait été
+découvert au pire moment.
+
+> Les modules de `runtime/` (ragdoll, équilibre, appuis, inertie) compilent aussi,
+> mais `luau-analyze` y signale une quarantaine d'erreurs de type restantes. La
+> majorité vient de l'absence des types Roblox hors Studio — l'arithmétique
+> `Vector3` devient `unknown` — mais pas toutes. Elles sont antérieures à cette
+> passe et pas encore triées.

@@ -293,15 +293,34 @@ def test_the_full_cinematic_scenario_builds():
     assert built.director, "camera cuts and world effects go on the director clock"
 
 
-def test_events_bound_to_an_actor_become_markers_in_that_actors_animation():
-    built = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
-    names = {
+def _marker_names(built) -> set[str]:
+    return {
         name
         for frames in built.markers.values()
         for entries in frames.values()
         for name, _ in entries
     }
-    assert {"linen_prop", "linen_sound", "linen_face", "linen_line"} <= names
+
+
+def test_events_bound_to_an_actor_become_markers_in_that_actors_animation():
+    built = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
+    assert {"linen_prop", "linen_face", "linen_line"} <= _marker_names(built)
+
+
+def test_an_authored_sound_event_still_rides_its_actors_animation():
+    """Spotting derives most sounds now, but a hand-placed one must still work."""
+    data = json.loads(json.dumps(DUET))
+    data["events"] = [
+        {
+            "kind": "sound",
+            "cue": "a_punch",
+            "offset": 0.1,
+            "actor": "Alice",
+            "asset": "rbxassetid://12345",
+        }
+    ]
+    built = build_scene(Scene.from_dict(data), **OFFLINE)
+    assert "linen_sound" in _marker_names(built)
 
 
 def test_camera_cuts_have_no_actor_so_they_ride_the_director_clock():
@@ -468,7 +487,7 @@ def test_the_player_carries_the_shots_props_and_director_clock():
     script = scene_script(built)
     assert 'id = "wall"' in script and 'id = "two_shot"' in script
     assert 'name = "Pistol"' in script
-    assert "local DIRECTOR = {" in script
+    assert "local DIRECTOR" in script
     assert "EXPRESSIONS" in script and "LipCornerPuller" in script
 
 

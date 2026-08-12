@@ -127,7 +127,10 @@ def _rig_block(name: str, rig: RigDefinition) -> list[str]:
         lines.append(f"\t\t\tmaxTorque = {limit.max_torque:g},")
         lines.append("\t\t},")
     lines.append("\t},")
-    lines.append("}")
+    # Cast the literal rather than let it be inferred: without it, `kind` is a
+    # plain string and strict mode rejects it against the JointKind union, so
+    # every generated rig block lights up red in Studio.
+    lines.append("} :: RigSpec")
     return lines
 
 

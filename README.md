@@ -360,18 +360,56 @@ hors-ligne couvre l'animation — l'ensemble reste local.
 mode de travail recommandé : le modèle propose le découpage, tu ajustes les
 `offset`, tu reconstruis.
 
+#### Le son : repéré, pas placé à la main
+
+Détaillé dans [`docs/SON.md`](docs/SON.md).
+
+Tu n'écris aucun événement sonore. Les clips contiennent la rotation de chaque
+partie sur chaque frame, donc la cinématique directe donne la position des deux
+poings et des deux pieds sur chaque frame de la prise — et un poing qui
+accélère puis freine brutalement contre le torse d'en face, **c'est** un coup
+qui touche. La frame est une mesure, pas une estimation.
+
+`linen scene` sort donc une **conduite son**, comme il sort déjà une feuille de
+plateau :
+
+```
+slot            cat    n  quand                       il te faut
+punch_impact    FX     1  2.03s                       Impact d'un poing sur un corps — sourd, court, avec du grave
+footstep        FOL    7  0.20, 0.50, 0.80...s        Un pas...
+dialogue        DX     2  2.67, 4.42s                 1. Hahaha, you couldn't even swing me!; 2. Nooo...
+tension_drone   MUS    -  1.11-4.72s (nappe)          Nappe grave et tenue, qui monte quand ça chauffe
+heartbeat       MUS    -  0.00-4.72s (nappe)          Battement de cœur — Thug encaisse plus qu'il ne donne
+
+Tension (0-1) :   ▁▂▃▄▄▄▄▄▄▄▄▄▄▄▄▃▃▃▃▃▃▃▃    pic à 0.62
+```
+
+Personne n'a écrit que Thug était mal en point : chaque coup qui touche
+enregistre qui il touche, et le cœur va à celui qui encaisse plus qu'il ne
+donne.
+
+Tu colles les identifiants **une fois** dans `<Scène>.audio.json` ; ils
+survivent à toutes les régénérations. Trois slots (`footstep`, `jump_land`,
+`effort`) sont déjà remplis avec des fichiers **livrés dans le client Roblox** —
+rien à uploader, rien à faire modérer.
+
+La courbe de tension est écrite dans le script et lue en direct : elle gonfle le
+drone, ouvre la profondeur du `TremoloSoundEffect` — le tremblement — et fait
+tomber les aigus quand ça monte.
+
 #### Ce que la scène ne fait pas
 
 **Le contact résolu.** Faire atterrir une main sur l'épaule de l'autre, pour
 deux rigs de proportions inconnues, demande un solveur IK avec conscience des
 collisions. Les cues donnent la mise en place et le timing — ce qui représente
 l'essentiel de ce qui *se lit* comme une interaction à l'écran — mais les
-derniers centimètres se règlent à la main dans l'Animation Editor.
+derniers centimètres se règlent à la main dans l'Animation Editor. Le repérage
+son le dit quand la mise en place ne suffit pas : *« 1 coup détecté mais aucun
+ne touche : les acteurs sont trop loin l'un de l'autre »*.
 
-**Les visages.** R15 s'arrête au cou. « Parler » ici, c'est du geste et du
-mouvement de tête (cycles `talk`, `nod`, `shake_head`). La vraie animation
-faciale Roblox passe par les *dynamic heads* et `FaceControls` (50 poses FACS),
-qui sont un rig entièrement séparé — non couvert.
+**Trouver les sons.** Linen dit lesquels il faut, quand ils tombent et avec
+quels mots-clés les chercher dans le Creator Store. Il ne peut pas inventer un
+asset ID.
 
 ## Le runtime : mouvement organique en jeu (style Euphoria)
 
@@ -439,6 +477,12 @@ Le test qui compte le plus est
 `test_rest_pose_solves_to_identity_on_every_joint` : une silhouette debout en
 pose de repos doit se recibler en rotation identité sur chaque articulation. Si
 une convention d'axe dérive quelque part dans la chaîne, il tombe.
+
+Le second est `test_only_actual_thrusts_are_heard_as_strikes` : il passe les
+seize actions du planificateur, sur les deux rigs, dans le repérage son et
+exige zéro faux positif. C'est lui qui a fixé chaque seuil du détecteur de
+coups — et il attrape immédiatement une pose retouchée qui se met à ressembler
+à un coup de poing.
 
 ## Ce qui n'est pas là
 
