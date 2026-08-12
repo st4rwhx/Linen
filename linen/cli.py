@@ -30,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     _add_prompt(sub)
     _add_synth(sub)
     _add_scene(sub)
+    _add_library(sub)
     sub.add_parser("providers", help="show which LLM providers are configured")
     sub.add_parser("vocabulary", help="list the pose and cycle names a plan may use")
 
@@ -40,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         "prompt": _cmd_prompt,
         "synth": _cmd_synth,
         "scene": _cmd_scene,
+        "library": _cmd_library,
         "providers": _cmd_providers,
         "vocabulary": _cmd_vocabulary,
     }[args.command]
@@ -195,6 +197,16 @@ def _add_prompt(sub) -> None:
     parser.add_argument(
         "--save-plan", type=Path, default=None, help="also write the plan as JSON"
     )
+    parser.add_argument(
+        "--library",
+        type=Path,
+        default=None,
+        help=(
+            "pick real motion capture instead of composing poses. Takes an "
+            "index built by `linen library build`. This is the route to motion "
+            "that looks captured, because it was"
+        ),
+    )
     _add_common_output(parser)
 
 
@@ -293,6 +305,74 @@ def _add_scene(sub) -> None:
     )
 
 
+
+def _add_library(sub) -> None:
+    parser = sub.add_parser(
+        "library",
+        help="index a mocap library, then let a prompt pick from it",
+        description=(
+            "Real motion capture beats a hand-built pose book, and no amount of "
+            "work on the pose book changes that. Point this at a folder of BVH "
+            "and it measures every clip, so a prompt can choose one. CMU's "
+            "database is 2548 motions, ships descriptions, and its own README "
+            "says the data is free for commercial projects."
+        ),
+    )
+    action = parser.add_subparsers(dest="action", required=True)
+
+    build = action.add_parser("build", help="index a folder of .bvh")
+    build.add_argument("folder", type=Path)
+    build.add_argument("-o", "--out", type=Path, required=True, help="index JSON to write")
+    build.add_argument(
+        "--descriptions",
+        type=Path,
+        default=None,
+        help=(
+            "a 'name<TAB>description' index, e.g. CMU's cmu-mocap-index-text.txt. "
+            "Without it, filenames are used"
+        ),
+    )
+    build.add_argument("--skeleton", default="mixamo")
+    build.add_argument("--units", default="cm", choices=("mm", "cm", "m"))
+
+    find = action.add_parser("search", help="what does this prompt match?")
+    find.add_argument("index", type=Path)
+    find.add_argument("text")
+    find.add_argument("--limit", type=int, default=8)
+
+
+def _cmd_library(args) -> int:
+    from .library import Library, build_library, describe, read_descriptions
+
+    if args.action == "build":
+        descriptions = read_descriptions(args.descriptions) if args.descriptions else None
+
+        def progress(index, total, path, error=None):
+            if error:
+                print(f"  skipped {path.name}: {error}", file=sys.stderr)
+            elif index % 25 == 0:
+                print(f"  {index}/{total}...", file=sys.stderr)
+
+        library = build_library(
+            args.folder,
+            descriptions=descriptions,
+            skeleton=args.skeleton,
+            units=args.units,
+            on_progress=progress,
+        )
+        path = library.save(args.out)
+        print(f"{path}: {len(library.entries)} clips indexes")
+        return 0
+
+    library = Library.load(args.index)
+    hits = library.search(args.text, limit=args.limit)
+    if not hits:
+        print(f"aucun clip ne correspond a {args.text!r} dans {len(library.entries)} clips")
+        return 1
+    for score, entry in hits:
+        print(f"{score:6.2f}  {entry.name:14} {entry.description[:46]:48} {describe(entry)}")
+    return 0
+
 # ---------------------------------------------------------------------------
 def _target_rigs(args) -> list:
     """The rigs to write. ``--rig both`` covers R15 and R6 in one run."""
@@ -335,6 +415,9 @@ def _cmd_bvh(args) -> int:
 def _cmd_prompt(args) -> int:
     from .generate.choreographer import plan_for_prompt
 
+    if args.library is not None:
+        return _prompt_from_library(args)
+
     providers = None
     if args.provider:
         from .generate.providers import BY_NAME
@@ -359,6 +442,64 @@ def _cmd_prompt(args) -> int:
 
     return _write(_synthesize_all(plan, args), args)
 
+
+
+def _prompt_from_library(args) -> int:
+    """Answer a prompt with real capture rather than composed poses."""
+    from .library import Library, describe
+    from .retarget import SolveOptions, solve_clip
+    from .sources import load_bvh
+
+    library = Library.load(args.library)
+    hits = library.search(args.text, limit=5)
+    if not hits:
+        raise ValueError(
+            f"aucun des {len(library.entries)} clips ne correspond a "
+            f"{args.text!r}. Essaie `linen library search` pour voir ce que la "
+            f"bibliotheque contient."
+        )
+
+    score, entry = hits[0]
+    print(f"{entry.name}: {entry.description}  [{describe(entry)}]  score {score:.2f}")
+    for other_score, other in hits[1:4]:
+        print(f"  sinon: {other.name:12} {other.description[:44]:46} {other_score:.2f}")
+
+    track = load_bvh(library.resolve(entry), skeleton="mixamo", units="cm")
+    clips = []
+    for rig in _target_rigs(args):
+        clip = solve_clip(
+            rig,
+            track,
+            # `prompt` has no --smoothing of its own; capture needs a little.
+            SolveOptions(root_motion=args.motion == "natural", smoothing_frames=3),
+        )
+        clip.name = entry.name
+        clips.append(_trim(clip, _duration(args.duration)))
+    return _write(clips, args)
+
+
+def _trim(clip: AnimationClip, seconds: float | None) -> AnimationClip:
+    """Cut a capture down to the asked-for length.
+
+    Takes the opening, which is the honest simple choice: CMU's takes run for
+    tens of seconds and contain several actions, and picking *which* stretch of
+    a long take answers the prompt is a different problem than picking the
+    take. Silently handing back fifteen seconds when two were asked for is the
+    one option that is definitely wrong.
+    """
+    if seconds is None or seconds <= 0 or clip.duration <= seconds:
+        return clip
+    frames = max(round(seconds * clip.fps) + 1, 2)
+    trimmed = AnimationClip(
+        rig=clip.rig,
+        fps=clip.fps,
+        rotations={part: track[:frames].copy() for part, track in clip.rotations.items()},
+        name=clip.name,
+        metadata=dict(clip.metadata),
+    )
+    if clip.root_positions is not None:
+        trimmed.root_positions = clip.root_positions[:frames].copy()
+    return trimmed
 
 def _cmd_synth(args) -> int:
     plan = MotionPlan.from_dict(json.loads(args.plan.read_text()))

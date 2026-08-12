@@ -10,6 +10,11 @@ prompt texte, sans coût d'API.
 > **Tu veux l'installer et t'en servir ?**
 > **[`docs/MODE_EMPLOI.md`](docs/MODE_EMPLOI.md)** : l'installation, chaque
 > commande, ce qu'elle fait vraiment, et où sont les limites.
+>
+> **Tu veux des animations qui ont l'air capturées ?**
+> **[`docs/ANIMATIONS_DE_FOU.md`](docs/ANIMATIONS_DE_FOU.md)** : pourquoi toute
+> la pile IA text-to-motion est fermée pour un jeu qu'on vend, quelles
+> bibliothèques sont réellement utilisables, et comment un prompt y pioche.
 
 ```bash
 # un prompt -> une animation. Aucune clé, aucun GPU, aucun réseau.

@@ -41,6 +41,7 @@ linen synth       plan JSON          -> animation
 linen bvh         .bvh               -> animation
 linen retarget    capture FreeMoCap  -> animation
 linen scene       scène JSON         -> cinématique complète
+linen library     indexer de la mocap, et y piocher par prompt
 linen vocabulary  ce que le planificateur sait faire
 ```
 
@@ -100,9 +101,19 @@ Conséquence pratique :
 - **Ce qu'il ne fait pas** : de la mocap de qualité studio à partir d'une
   phrase. Personne ne le fait gratuitement et hors-ligne aujourd'hui.
 
-Pour de la vraie qualité de mouvement, voir la section `linen bvh` ci-dessous :
-c'est le même outil, alimenté par du vrai mocap. **C'est le chemin recommandé
-pour un jeu que tu sors.**
+Pour de la vraie qualité de mouvement, il y a mieux que le vocabulaire :
+**`linen library`**, qui laisse le prompt piocher dans une bibliothèque de vraie
+mocap au lieu de composer des poses.
+
+```bash
+linen library build ~/cmu/data -o cmu.json --descriptions ~/cmu/index.txt
+linen prompt "coup de poing" --library cmu.json -o build/punch.rbxmx
+```
+
+La base CMU fait 2548 mouvements, dit dans son propre README qu'elle est libre
+pour un usage commercial, et arrive avec ses descriptions. Le raisonnement
+complet — et pourquoi la pile IA text-to-motion ne convient pas à un jeu qu'on
+vend — est dans [`ANIMATIONS_DE_FOU.md`](ANIMATIONS_DE_FOU.md).
 
 ---
 
