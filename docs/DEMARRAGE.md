@@ -52,6 +52,10 @@ en opposition aux jambes, et le pied posé ne doit pas glisser.
 **Fais-le pour les sept.** C'est deux minutes, et c'est la seule étape qui te dit
 si un fichier vaut la peine d'être importé — avant d'en publier sept.
 
+> Le personnage est en boîtes parce qu'un Block Rig en est. Si tu as un rig R15
+> pour Blender, `linen scene ... --skin ton_rig.blend` l'affiche à la place, et
+> la page gagne un sélecteur pour basculer entre les deux. Voir le README.
+
 ---
 
 ## Étape 2 — voir une animation jouer dans Studio (5 min)

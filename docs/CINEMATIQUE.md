@@ -218,6 +218,7 @@ une session de débogage dans Studio.
 | Script Studio : caméra, props, VFX, visages, répliques | **Fait**, jamais exécuté |
 | Script Studio : bus audio, sons repérés, ambiance | **Fait**, jamais exécuté |
 | Visualiseur 3D interactif, avec caméra du réalisateur | **Fait**, et il tourne |
+| Afficher un vrai rig Blender à la place des boîtes | **Fait**, et il tourne |
 | Décor généré | **Non, et ce n'est pas prévu** |
 
 Rien de ce qui touche à Studio n'a encore **tourné** une seule fois. C'est le

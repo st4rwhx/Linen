@@ -55,9 +55,12 @@ def standing_height(rig) -> float:
     )
 
 
-def clip_payload(clip: AnimationClip, *, name: str | None = None) -> dict[str, Any]:
+def clip_payload(
+    clip: AnimationClip, *, name: str | None = None, skins: list[dict] | None = None
+) -> dict[str, Any]:
     """One clip, viewable on its own."""
     return {
+        "skins": skins or [],
         "name": name or clip.name or "Clip",
         "fps": clip.fps,
         "duration": (clip.frame_count - 1) / clip.fps if clip.fps else 0.0,
@@ -85,7 +88,9 @@ def clip_payload(clip: AnimationClip, *, name: str | None = None) -> dict[str, A
     }
 
 
-def scene_payload(built, *, sheet=None, set_plan=None) -> dict[str, Any]:
+def scene_payload(
+    built, *, sheet=None, set_plan=None, skins: list[dict] | None = None
+) -> dict[str, Any]:
     """A whole cinematic: cast, staging, set, shots, cues and soundtrack."""
     scene = built.scene
     rigs = {}
@@ -109,6 +114,7 @@ def scene_payload(built, *, sheet=None, set_plan=None) -> dict[str, Any]:
         )
 
     return {
+        "skins": skins or [],
         "name": scene.name,
         "fps": scene.fps,
         "duration": built.duration,
@@ -354,6 +360,9 @@ _PAGE = r"""<!doctype html>
         <option value="2">2×</option>
       </select>
     </label>
+    <label id="skinpick" hidden>rig
+      <select id="skin"></select>
+    </label>
     <button id="director">🎬 Caméra du réalisateur</button>
     <button id="showset" class="on">Décor</button>
     <button id="showgrid" class="on">Grille</button>
@@ -480,6 +489,8 @@ const tctx = timeline.getContext('2d');
 const state = {
   time: 0, playing: false, loop: true, speed: 1,
   director: false, showSet: true, showGrid: true,
+  //: Index into DATA.skins, or -1 for the plain boxes a Block Rig really is.
+  skin: DATA.skins.length ? 0 : -1,
 };
 const frames = Math.max(DATA.frameCount, 1);
 const duration = DATA.duration || (frames - 1) / (DATA.fps || 30);
@@ -619,6 +630,34 @@ function draw() {
 
   if (state.showGrid) drawGrid(project);
 
+  // A skin replaces a part's box with real geometry. Its vertices are already
+  // in that part's local space, scaled into that part's box, so it rides the
+  // exact same transform the box does and cannot come apart at the joints.
+  function skinned(centre, rot, geometry, rgb) {
+    const verts = geometry.vertices, tris = geometry.triangles;
+    const world = new Array(verts.length / 3);
+    for (let i = 0; i < world.length; i++) {
+      world[i] = add(centre, matVec(rot, [verts[i*3], verts[i*3+1], verts[i*3+2]]));
+    }
+    const screen = world.map(project);
+    for (let t = 0; t < tris.length; t += 3) {
+      const a = screen[tris[t]], b2 = screen[tris[t+1]], c2 = screen[tris[t+2]];
+      if (!a || !b2 || !c2) continue;
+      const wa = world[tris[t]], wb = world[tris[t+1]], wc = world[tris[t+2]];
+      const n = norm(cross(sub(wb, wa), sub(wc, wb)));
+      if (dot(n, sub(wa, eye)) > 0) continue;
+      const shade = 0.42 + 0.58 * Math.max(dot(n, LIGHT), 0);
+      quads.push({
+        pts: [a, b2, c2],
+        depth: (a.z + b2.z + c2.z) / 3,
+        fill: `rgb(${Math.round(rgb[0]*shade)},${Math.round(rgb[1]*shade)},` +
+              `${Math.round(rgb[2]*shade)})`,
+      });
+    }
+  }
+
+  const skin = DATA.skins[state.skin] || null;
+
   DATA.actors.forEach((actor, index) => {
     const rgb = PALETTE[index % PALETTE.length];
     const rig = DATA.rigs[actor.rig];
@@ -626,7 +665,11 @@ function draw() {
     for (const part of rig.parts) {
       if (part.parent === null) continue;  // HumanoidRootPart is invisible in game
       const local = placed[actor.name][part.name];
-      box(add(actor.position, matVec(yaw, local.p)), matMul(yaw, local.r), part.size, rgb, 1);
+      const centre = add(actor.position, matVec(yaw, local.p));
+      const rot = matMul(yaw, local.r);
+      const geometry = skin && skin.rig === actor.rig ? skin.parts[part.name] : null;
+      if (geometry) skinned(centre, rot, geometry, rgb);
+      else box(centre, rot, part.size, rgb, 1);
     }
   });
 
@@ -862,6 +905,29 @@ toggle('loop', 'loop');
 toggle('director', 'director');
 toggle('showset', 'showSet');
 toggle('showgrid', 'showGrid');
+
+// The rig picker only appears when there is a choice to make.
+(function skinPicker() {
+  if (!DATA.skins.length) return;
+  const pick = document.getElementById('skinpick');
+  const select = document.getElementById('skin');
+  pick.hidden = false;
+  DATA.skins.forEach((s, i) => {
+    const option = document.createElement('option');
+    option.value = String(i);
+    option.textContent = s.name;
+    select.appendChild(option);
+  });
+  const boxes = document.createElement('option');
+  boxes.value = '-1';
+  boxes.textContent = 'Boîtes (Block Rig)';
+  select.appendChild(boxes);
+  select.value = String(state.skin);
+  select.addEventListener('change', ev => {
+    state.skin = parseInt(ev.target.value, 10);
+    draw();
+  });
+})();
 
 document.getElementById('play').addEventListener('click', togglePlay);
 document.getElementById('speed').addEventListener('change', ev => {

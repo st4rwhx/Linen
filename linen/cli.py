@@ -85,6 +85,19 @@ def _add_common_output(parser: argparse.ArgumentParser) -> None:
         help="skip the standalone .html 3D viewer written next to the .rbxmx",
     )
     parser.add_argument(
+        "--skin",
+        type=Path,
+        action="append",
+        default=None,
+        metavar="RIG.blend",
+        help=(
+            "dress the 3D viewer in a real rig instead of boxes. Takes a .blend "
+            "saved without compression, holding one mesh object per Roblox part "
+            "(Head, LeftUpperArm...). Repeatable; the viewer gets a rig picker. "
+            "Proportions stay Linen's — only the shapes change."
+        ),
+    )
+    parser.add_argument(
         "--motion",
         default="in-place",
         choices=("in-place", "natural", "loop"),
@@ -264,6 +277,19 @@ def _add_scene(sub) -> None:
         "--no-viewer",
         action="store_true",
         help="skip the standalone <Scene>.html 3D viewer",
+    )
+    parser.add_argument(
+        "--skin",
+        type=Path,
+        action="append",
+        default=None,
+        metavar="RIG.blend",
+        help=(
+            "dress the 3D viewer in a real rig instead of boxes. Takes a .blend "
+            "saved without compression, holding one mesh object per Roblox part "
+            "(Head, LeftUpperArm...). Repeatable; the viewer gets a rig picker. "
+            "Proportions stay Linen's — only the shapes change."
+        ),
     )
 
 
@@ -447,7 +473,9 @@ def _cmd_scene(args) -> int:
         from .export import scene_payload, write_viewer
 
         viewer = write_viewer(
-            scene_payload(built, sheet=sheet, set_plan=set_plan),
+            scene_payload(
+                built, sheet=sheet, set_plan=set_plan, skins=_skins(args, None, len(scene.actors))
+            ),
             args.out / f"{scene.name}.html",
         )
         print(f"{viewer}: visualiseur 3D — ouvre-le, c'est la scene entiere")
@@ -498,6 +526,41 @@ def _cmd_vocabulary(_args) -> int:
     return 0
 
 
+def _skins(args, rig, actors: int = 1) -> list:
+    """Load every --skin, reporting what each one covers.
+
+    A skin that only matches some parts is still worth showing: the rest fall
+    back to boxes, and the gap is named rather than silently drawn.
+    """
+    paths = getattr(args, "skin", None)
+    if not paths:
+        return []
+    from .export.skin import TRIANGLE_BUDGET, load_skin
+
+    # The budget is per frame for the whole cast, so a crowd scene gets
+    # simpler geometry rather than a slower page.
+    budget = max(TRIANGLE_BUDGET // max(actors, 1), 400)
+    rigs = [rig.name] if rig is not None else ["R15", "R6"]
+    skins = []
+    for path in paths:
+        for name in rigs:
+            try:
+                skin = load_skin(path, rig=name, budget=budget)
+            except ValueError as exc:
+                if name == rigs[-1]:
+                    print(f"warning: {exc}", file=sys.stderr)
+                continue
+            covered = len(skin["parts"])
+            gap = f", {len(skin['missing'])} en boîtes" if skin["missing"] else ""
+            print(
+                f"{path}: habillage {name} — {covered} parties, "
+                f"{skin['triangles']} triangles{gap}"
+            )
+            skins.append(skin)
+            break
+    return skins
+
+
 def _write(clips: list[AnimationClip], args) -> int:
     for clip in clips:
         out = _suffixed(args.out, clip.rig.name, len(clips) > 1)
@@ -520,7 +583,10 @@ def _write(clips: list[AnimationClip], args) -> int:
         if not args.no_viewer:
             from .export import clip_payload, write_viewer
 
-            page = write_viewer(clip_payload(clip), out.with_suffix(".html"))
+            page = write_viewer(
+                clip_payload(clip, skins=_skins(args, clip.rig)),
+                out.with_suffix(".html"),
+            )
             print(f"{page}: visualiseur 3D — ouvre-le avant d'importer quoi que ce soit")
 
     print("import into Studio with Animation Editor > ... > Import > From File")

@@ -330,6 +330,36 @@ Regarde la prise avant d'importer quoi que ce soit. C'est la seule vérification
 qui coûte deux secondes et qui répond à la vraie question : *est-ce que ça
 ressemble à ce que j'ai demandé.*
 
+#### Choisir le rig affiché
+
+Par défaut c'est des boîtes — parce qu'un Block Rig *est* des boîtes. Mais ça
+ressemble à une hitbox, et une hitbox en dit moins qu'un vrai personnage. Donne
+un rig Blender et la page l'affiche à la place :
+
+```bash
+linen scene examples/disarm.scene.json -o build/ --skin MrXen0_R15RIG_v1.2.blend
+# MrXen0_R15RIG_v1.2.blend: habillage R15 — 15 parties, 2390 triangles
+```
+
+Le `.blend` est lu directement, sans Blender : un `.blend` est un vidage
+auto-descriptif de la mémoire de Blender, et un de ses blocs contient la
+définition de toutes ses structures. Il faut **un objet maillage par partie
+Roblox**, nommé exactement comme Roblox les nomme (`Head`, `LeftUpperArm`…) —
+ce que font déjà les rigs R15 qui circulent. `--skin` est répétable, et la page
+gagne un sélecteur *rig* pour passer de l'un à l'autre, boîtes comprises.
+
+> Enregistre depuis Blender **sans compression** (`Fichier > Enregistrer sous`,
+> décoche « Compresser ») : Blender compresse en Zstandard, que Python ne sait
+> pas relire ici. Le message d'erreur te le redira.
+
+**Le squelette reste celui de Linen.** Chaque maillage est recentré et mis à
+l'échelle de la boîte de sa partie, mesurée sur le ClassicMannequin de Roblox.
+Les articulations tombent donc exactement là où le solveur les met, quelles que
+soient les proportions du rig prêté — un habillage change ce que tu regardes,
+jamais ce qui est exporté. C'est la même raison qui fait que l'export ne
+contient que des rotations : une animation, ce sont des angles, donc elle joue
+correctement sur n'importe quel avatar.
+
 > Le composant React pour FreeMoCap est séparé, dans
 > [`viewport/README.md`](viewport/README.md) : deux fichiers à déposer dans
 > `freemocap-ui`, un `<RobloxRig rig="R15" clip={clip} />` dans la scène.
