@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .build import BuiltScene
+from .player import BODY
 
 HEADER = """\
 --!strict
@@ -58,98 +59,67 @@ def scene_script(built: BuiltScene, *, folder: str = "ServerStorage.LinenAnimati
         )
     lines.append("}")
     lines.append("")
+
+    lines.append("local SHOTS = {")
+    for shot in scene.shots:
+        x, y, z = shot.position
+        dx, dy, dz = shot.drift
+        lines.append(
+            f'\t{{ id = "{_escape(shot.id)}", position = Vector3.new({x:g}, {y:g}, {z:g}), '
+            f'lookAt = "{_escape(shot.look_at)}", fov = {shot.fov:g}, blend = {shot.blend:g}, '
+            f"drift = Vector3.new({dx:g}, {dy:g}, {dz:g}) }},"
+        )
+    lines.append("}")
+    lines.append("")
+
+    lines.append("local PROPS = {")
+    for prop in scene.props:
+        gx, gy, gz = prop.grip
+        held = f'"{_escape(prop.held_by)}"' if prop.held_by else "nil"
+        lines.append(
+            f'\t{{ name = "{_escape(prop.name)}", source = "{_escape(prop.source)}", '
+            f'heldBy = {held}, attachTo = "{_escape(prop.attach_to)}", '
+            f"grip = Vector3.new({gx:g}, {gy:g}, {gz:g}) }},"
+        )
+    lines.append("}")
+    lines.append("")
+
+    lines.append("-- Events with no actor: camera cuts and world effects.")
+    lines.append("local DIRECTOR = {")
+    for when, event in built.director:
+        actor = f'"{_escape(event.actor)}"' if event.actor else "nil"
+        lines.append(
+            f'\t{{ at = {when:g}, kind = "{event.kind}", '
+            f'value = "{_escape(event.marker_value())}", actor = {actor} }},'
+        )
+    lines.append("}")
+    lines.append("")
+
+    lines.append("-- Named expressions to FACS pose blends, so scenes stay readable.")
+    lines.append("local EXPRESSIONS: { [string]: { [string]: number } } = {")
+    for name, poses in _FACS.items():
+        entries = ", ".join(f"{k} = {v:g}" for k, v in poses.items())
+        lines.append(f"\t{name} = {{ {entries} }},")
+    lines.append("}")
+    lines.append("")
+
     lines.append(BODY)
     return "\n".join(lines)
 
 
-BODY = '''\
-local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
-
--- "ServerStorage.LinenAnimations" and friends. The first segment may be a
--- service, which is not a child of game until it exists, so it gets a
--- GetService fallback; deeper segments are ordinary children.
-local function resolve(path: string): Instance?
-\tlocal current: Instance = game
-\tfor segment in string.gmatch(path, "[^%.]+") do
-\t\tlocal child: Instance? = current:FindFirstChild(segment)
-\t\tif child == nil and current == game then
-\t\t\tlocal ok, service = pcall(game.GetService, game, segment)
-\t\t\tif ok then
-\t\t\t\tchild = service
-\t\t\tend
-\t\tend
-\t\tif child == nil then
-\t\t\treturn nil
-\t\tend
-\t\tcurrent = child
-\tend
-\treturn current
-end
-
-local folder = resolve(FOLDER_PATH)
-if folder == nil then
-\terror(string.format("Linen: no %s — import the .rbxmx files there first.", FOLDER_PATH))
-end
-
-local tracks: { AnimationTrack } = {}
-
-for _, entry in STAGE do
-\tlocal model = workspace:FindFirstChild(entry.name)
-\tif model == nil or not model:IsA("Model") then
-\t\twarn(string.format("Linen: no rig named %q in Workspace — skipping.", entry.name))
-\t\tcontinue
-\tend
-
-\t-- Stage the rig. Facing another actor is resolved now, so moving either of
-\t-- them and re-running is enough to re-aim both.
-\tlocal look = entry.position
-\tif typeof(entry.facing) == "string" then
-\t\tlocal other = workspace:FindFirstChild(entry.facing)
-\t\tif other and other:IsA("Model") then
-\t\t\tlook = other:GetPivot().Position
-\t\tend
-\telseif typeof(entry.facing) == "number" then
-\t\tlook = entry.position + Vector3.new(math.sin(math.rad(entry.facing)), 0, -math.cos(math.rad(entry.facing)))
-\tend
-
-\tif look ~= entry.position then
-\t\tmodel:PivotTo(CFrame.lookAt(entry.position, Vector3.new(look.X, entry.position.Y, look.Z)))
-\telse
-\t\tmodel:PivotTo(CFrame.new(entry.position))
-\tend
-
-\tlocal humanoid = model:FindFirstChildOfClass("Humanoid")
-\tlocal animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
-\tif animator == nil then
-\t\twarn(string.format("Linen: %q has no Humanoid/Animator — skipping.", entry.name))
-\t\tcontinue
-\tend
-
-\tlocal sequenceName = string.format("%s_%s", SCENE_NAME, entry.name)
-\tlocal sequence = folder:FindFirstChild(sequenceName)
-\tif sequence == nil or not sequence:IsA("KeyframeSequence") then
-\t\twarn(string.format("Linen: no KeyframeSequence %q in %s — skipping.", sequenceName, FOLDER_PATH))
-\t\tcontinue
-\tend
-
-\tlocal animation = Instance.new("Animation")
-\tanimation.Name = sequenceName
-\tanimation.AnimationId = KeyframeSequenceProvider:RegisterKeyframeSequence(sequence)
-
-\tlocal track = animator:LoadAnimation(animation)
-\ttrack.Priority = Enum.AnimationPriority.Action4
-\ttrack.Looped = false
-\ttable.insert(tracks, track)
-end
-
--- Every actor starts on the same frame. One track each, all begun together,
--- is the only arrangement that cannot drift over a long take.
-for _, track in tracks do
-\ttrack:Play(0)
-end
-
-print(string.format("Linen: playing %q — %d actors, %.2fs, %d cues.", SCENE_NAME, #tracks, DURATION, #CUES))
-'''
+#: A small, deliberate subset of the 50 FACS poses — enough to read at Roblox
+#: camera distances, and named so a scene never mentions a coefficient.
+_FACS: dict[str, dict[str, float]] = {
+    "neutral": {},
+    "smug": {"LeftLipCornerPuller": 0.75, "RightLipCornerPuller": 0.2, "LeftBrowLowerer": 0.25},
+    "angry": {"LeftBrowLowerer": 0.9, "RightBrowLowerer": 0.9, "LipPressor": 0.6, "NoseWrinkler": 0.4},
+    "afraid": {"LeftOuterBrowRaiser": 0.8, "RightOuterBrowRaiser": 0.8, "LeftEyeUpperLidRaiser": 0.9, "RightEyeUpperLidRaiser": 0.9, "JawDrop": 0.35},
+    "surprised": {"LeftInnerBrowRaiser": 1.0, "RightInnerBrowRaiser": 1.0, "JawDrop": 0.5},
+    "pain": {"LeftEyeClosed": 0.85, "RightEyeClosed": 0.85, "NoseWrinkler": 0.7, "LipStretcher": 0.5},
+    "determined": {"LeftBrowLowerer": 0.5, "RightBrowLowerer": 0.5, "LipPressor": 0.4},
+    "laughing": {"LeftLipCornerPuller": 1.0, "RightLipCornerPuller": 1.0, "JawDrop": 0.6, "LeftCheekRaiser": 0.7, "RightCheekRaiser": 0.7},
+    "sad": {"LeftInnerBrowRaiser": 0.8, "RightInnerBrowRaiser": 0.8, "LeftLipCornerDepressor": 0.6, "RightLipCornerDepressor": 0.6},
+}
 
 
 def write_scene_script(

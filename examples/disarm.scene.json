@@ -4,8 +4,8 @@
   "notes": "Le scénario complet : Hero désarme Thug, le pistolet part au mur, la caméra suit l'impact et revient, puis la réplique. Tout est ancré sur le cue 'disarm' — retime-le et l'ensemble suit.",
 
   "actors": [
-    { "name": "Hero", "rig": "R15", "position": [0, 0, 0], "facing": "Thug" },
-    { "name": "Thug", "rig": "R15", "position": [0, 0, -4], "facing": "Hero" }
+    { "name": "Hero", "rig": "R15", "position": [0, 2.44, 0], "facing": "Thug" },
+    { "name": "Thug", "rig": "R15", "position": [0, 2.44, -4], "facing": "Hero" }
   ],
 
   "props": [
@@ -30,7 +30,7 @@
   ],
 
   "events": [
-    { "kind": "prop",   "cue": "disarm", "offset": 0.14, "actor": "Thug", "prop": "Pistol", "action": "throw", "impulse": [0, 9, -75] },
+    { "kind": "prop",   "cue": "disarm", "offset": 0.14, "actor": "Thug", "prop": "Pistol", "action": "throw", "impulse": [0, 3.43, -3.94] },
     { "kind": "sound",  "cue": "disarm", "offset": 0.14, "actor": "Hero", "asset": "rbxassetid://0", "volume": 1 },
 
     { "kind": "camera", "cue": "disarm", "offset": 0.34, "shot": "wall" },

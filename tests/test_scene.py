@@ -363,3 +363,117 @@ def test_a_prop_held_by_someone_absent_is_rejected():
     data["props"][0]["held_by"] = "Ghost"
     with pytest.raises(SceneError, match="not in the cast"):
         Scene.from_dict(data)
+
+
+# --- the set plan -----------------------------------------------------------
+def test_the_wall_position_is_solved_from_the_throw_not_assumed():
+    """The answer to 'where do I put the wall'.
+
+    Launch instant, impulse and impact instant are all known, and Roblox's
+    gravity is a constant — so the target's position is a solution, not a
+    preference.
+    """
+    from linen.scene import GRAVITY, plan_set
+
+    built = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
+    plan = plan_set(built)
+    wall = next(p for p in plan.placements if p.name == "Wall")
+
+    assert wall.derived
+    assert "de vol" in wall.reason
+    # Thrown towards -Z from around the origin, so it lands well ahead and
+    # somewhere a wall could plausibly be.
+    assert wall.position[2] < -8
+    assert 0 < wall.position[1] < 8
+    assert GRAVITY == 196.2
+
+
+def test_doubling_the_flight_time_moves_the_wall_further_out():
+    from linen.scene import plan_set
+
+    def wall_z(impact_offset: float) -> float:
+        data = json.loads(json.dumps(DISARM))
+        for event in data["events"]:
+            if event["kind"] == "vfx":
+                event["offset"] = impact_offset
+        built = build_scene(Scene.from_dict(data), **OFFLINE)
+        return next(p for p in plan_set(built).placements if p.name == "Wall").position[2]
+
+    assert wall_z(0.60) < wall_z(0.46)
+
+
+def test_a_throw_with_no_impact_event_says_the_wall_cannot_be_placed():
+    from linen.scene import plan_set
+
+    data = json.loads(json.dumps(DISARM))
+    data["events"] = [e for e in data["events"] if e["kind"] != "vfx"]
+    plan = plan_set(build_scene(Scene.from_dict(data), **OFFLINE))
+    assert any("aucun événement vfx" in w for w in plan.warnings)
+
+
+def test_an_actor_standing_at_the_origin_is_reported_as_buried():
+    """A Roblox character's position is its root, which sits at hip height."""
+    from linen.scene import plan_set
+
+    data = json.loads(json.dumps(DISARM))
+    data["actors"][0]["position"] = [0, 0, 0]
+    plan = plan_set(build_scene(Scene.from_dict(data), **OFFLINE))
+    assert any("enterré" in w for w in plan.warnings)
+
+
+def test_the_build_sheet_lists_what_the_scene_cannot_create():
+    from linen.scene import plan_set
+
+    plan = plan_set(build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE))
+    named = {name for name, _ in plan.required_assets}
+    assert "ReplicatedStorage.Props.Pistol" in named
+    assert "WallImpact" in named
+
+
+def test_a_shot_aimed_at_nothing_is_reported():
+    from linen.scene import plan_set
+
+    data = json.loads(json.dumps(DISARM))
+    data["shots"].append({"id": "void", "position": [0, 5, 20], "look_at": "Nothing"})
+    plan = plan_set(build_scene(Scene.from_dict(data), **OFFLINE))
+    assert any("Nothing" in w for w in plan.warnings)
+
+
+def test_the_blockout_names_its_parts_as_the_scene_expects_them():
+    from xml.etree import ElementTree as ET
+
+    from linen.scene import blockout, plan_set
+
+    built = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
+    root = ET.fromstring(blockout(plan_set(built)))
+    names = {
+        item.find("Properties").find("string[@name='Name']").text
+        for item in root.iter("Item")
+        if item.get("class") == "Part"
+    }
+    assert {"Wall", "Floor"} <= names
+
+
+# --- the player -------------------------------------------------------------
+def test_the_player_connects_one_marker_signal_per_event_kind():
+    built = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
+    script = scene_script(built)
+    assert 'GetMarkerReachedSignal("linen_" .. kind)' in script
+    for kind in ("sound", "vfx", "face", "line", "prop", "camera"):
+        assert f'"{kind}"' in script
+
+
+def test_the_player_carries_the_shots_props_and_director_clock():
+    built = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
+    script = scene_script(built)
+    assert 'id = "wall"' in script and 'id = "two_shot"' in script
+    assert 'name = "Pistol"' in script
+    assert "local DIRECTOR = {" in script
+    assert "EXPRESSIONS" in script and "LipCornerPuller" in script
+
+
+def test_the_player_reports_what_is_missing_rather_than_half_playing():
+    built = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
+    script = scene_script(built)
+    assert "table.insert(missing" in script
+    assert "est incomplète" in script

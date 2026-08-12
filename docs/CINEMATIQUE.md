@@ -146,18 +146,46 @@ peut pas inventer un asset ID. Le bon partage est :
 
 ---
 
-## Le décor
+## Le décor : où le placer ? Ça se calcule.
 
-C'est la partie que Linen ne fait **pas**, et il ne faut pas se raconter
-d'histoires : générer un décor Roblox depuis un prompt, ce n'est pas le même
-problème que générer du mouvement.
+Générer un décor depuis un prompt, non. Mais **savoir où il doit être**, oui —
+et ce n'est pas une estimation, c'est une résolution.
 
-Ce que Linen fait : il **nomme** ce dont la scène a besoin. `at_part: "Wall"`,
-`source: "ReplicatedStorage.Props.Pistol"`, `effect: "WallImpact"`. Le script
-généré cherche ces objets et **dit lesquels manquent** au lieu d'échouer en
-silence.
+Le pistolet quitte une main à un instant connu, avec une impulsion connue.
+L'effet d'impact dit à quel instant il arrive. La gravité Roblox vaut
+**196,2 studs/s²**. Deux temps connus et une gravité connue ne laissent qu'une
+inconnue : la position. `linen scene` l'intègre et sort une **feuille de
+plateau** :
 
-Tu construis le décor une fois dans Studio ; la scène s'y branche par nom.
+```
+Plateau — Disarm
+
+objet           type      position (studs)          pourquoi
+Wall            cible     (0.7, 2.1, -16.0)         Pistol lancé à 1.94s, impact à 2.26s (0.32s de vol)
+Floor           sol       (0.0, -0.5, -2.0)         2 acteurs + 4 studs de marge
+
+À fournir toi-même (la scène les nomme, elle ne peut pas les créer) :
+  ReplicatedStorage.Props.Pistol         modèle de l'accessoire Pistol
+  WallImpact                             ParticleEmitter ou effet nommé
+```
+
+Et un **blockout** : un `.rbxmx` de blocs gris, nommés et placés correctement,
+que tu déposes dans Studio. La scène joue immédiatement ; tu remplaces ensuite
+chaque bloc par du vrai décor, sans rien retoucher au timing.
+
+### Ce que ça a déjà attrapé
+
+En écrivant l'exemple, j'avais mis une impulsion de `[0, 9, -75]`. La feuille de
+plateau a répondu : **mur à 232 studs de distance et 16 de haut**. C'était une
+balle, pas un pistolet lancé. Corrigé avant d'ouvrir Studio une seule fois.
+
+Puis elle a signalé que mes deux acteurs étaient **enterrés jusqu'à la taille** :
+la position d'un personnage Roblox est celle de sa *racine*, qui se trouve à
+hauteur de hanche (2,44 studs sur un R15). Placé à `y=0` sur un sol à `y=0`, il
+a la moitié du corps sous terre.
+
+Aucun des deux n'était visible dans le fichier de scène. Les deux auraient coûté
+une session de débogage dans Studio.
 
 ---
 

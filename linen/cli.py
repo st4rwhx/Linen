@@ -394,6 +394,15 @@ def _cmd_scene(args) -> int:
         built, args.out / f"{scene.name}.server.luau", folder=args.folder
     )
     print(f"{script}: staging and playback script")
+
+    from .scene import blockout, plan_set
+
+    set_plan = plan_set(built)
+    blockout_path = args.out / f"{scene.name}_Blockout.rbxmx"
+    blockout_path.write_text(blockout(set_plan))
+    print(f"{blockout_path}: blockout du decor (placeholders gris, positions calculees)")
+    print()
+    print(set_plan.sheet())
     print(f"import the .rbxmx files into {args.folder}, then run the script in Studio")
     return 0
 
