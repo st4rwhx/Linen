@@ -287,3 +287,57 @@ def test_track_can_be_solved_without_the_optional_hand_landmarks(rest_bvh):
 def test_to_landmark_track_rejects_unknown_units(rest_bvh):
     with pytest.raises(ValueError, match="unknown units"):
         to_landmark_track(parse_bvh(rest_bvh), get_skeleton("mixamo"), units="furlongs")
+
+
+# --- the Roblox-named skeleton ---------------------------------------------
+R15_BVH = REST_BVH.replace("LeftArm", "LeftUpperArm").replace("RightArm", "RightUpperArm") \
+    .replace("LeftForeArm", "LeftLowerArm").replace("RightForeArm", "RightLowerArm") \
+    .replace("LeftUpLeg", "LeftUpperLeg").replace("RightUpLeg", "RightUpperLeg") \
+    .replace("JOINT LeftLeg", "JOINT LeftLowerLeg").replace("JOINT RightLeg", "JOINT RightLowerLeg") \
+    .replace("LeftToeBase", "LeftToe").replace("RightToeBase", "RightToe")
+
+
+def r15_bvh_text() -> str:
+    rows = [[0.0] * CHANNELS for _ in range(3)]
+    body = "\n".join(" ".join(f"{v:.4f}" for v in row) for row in rows)
+    return R15_BVH.replace("{rows}", body)
+
+
+@pytest.fixture
+def r15_bvh(tmp_path):
+    path = tmp_path / "roblox.bvh"
+    path.write_text(r15_bvh_text())
+    return path
+
+
+def test_a_bvh_with_roblox_part_names_is_understood(r15_bvh):
+    # What a Blender R15 rig's deform bones are called, and what Roblox's own
+    # exporters emit — the practical route for Mixamo motion, since Mixamo
+    # exports FBX and DAE and never BVH.
+    motion = parse_bvh(r15_bvh)
+    resolved = get_skeleton("r15").resolve(motion.names)
+    assert resolved["left_shoulder"] == "LeftUpperArm"
+    assert resolved["left_ankle"] == "LeftFoot"
+    assert get_skeleton("r15").missing_required(motion.names) == []
+
+
+def test_roblox_and_blender_r15_are_aliases():
+    assert get_skeleton("roblox") is get_skeleton("r15")
+    assert get_skeleton("blender-r15") is get_skeleton("r15")
+
+
+def test_a_roblox_named_rest_pose_retargets_to_near_identity(r15_bvh):
+    clip = solve_clip(R15, load_bvh(r15_bvh, skeleton="r15"), STILL)
+    identity = np.tile([0.0, 0.0, 0.0, 1.0], (clip.frame_count, 1))
+    worst = max(
+        float(np.rad2deg(quat_angle(clip.rotations[p], identity)).max())
+        for p in R15.animated_parts
+    )
+    assert worst < 2.0
+
+
+def test_the_mixamo_mapping_does_not_swallow_a_roblox_named_file(r15_bvh):
+    # Wrong --skeleton should fail loudly rather than half-resolve and produce
+    # a character animating only from the waist up.
+    with pytest.raises(ValueError, match="left_hip|left_shoulder"):
+        load_bvh(r15_bvh, skeleton="mixamo")

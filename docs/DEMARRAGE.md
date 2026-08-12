@@ -187,8 +187,9 @@ Dans l'ordre de ce qui rapporte le plus :
 2. **`FootPlanting`** — les pieds épousent le relief. À faire seulement si ton
    jeu a des pentes ou des escaliers.
 3. **De vraies animations mocap.** Tu n'as qu'une caméra, donc FreeMoCap n'est
-   pas pour toi tout de suite — mais [Mixamo](https://www.mixamo.com) est
-   gratuit, professionnel, et `linen bvh` lit déjà son format. C'est le vrai
-   saut de qualité, et il ne demande pas de matériel.
+   pas pour toi tout de suite. [Mixamo](https://www.mixamo.com) est gratuit et
+   professionnel — mais **il n'exporte pas de BVH**, seulement du FBX et du
+   DAE, donc Blender sert de convertisseur. Le chemin complet est décrit dans
+   [`MIXAMO.md`](MIXAMO.md).
 4. **`Ragdoll`** en dernier. C'est le plus spectaculaire et le plus risqué : il
    touche à la physique, donc à la réplication réseau.

@@ -96,7 +96,38 @@ MIXAMO = SkeletonMapping(
     notes="Mixamo / HumanML3D / most humanoid FBX rigs.",
 )
 
-SKELETONS: dict[str, SkeletonMapping] = {MIXAMO.name: MIXAMO}
+#: A skeleton whose bones already carry Roblox's own part names — which is what
+#: the community Blender R15 rigs use for their deform bones, and what Roblox's
+#: own exporters emit. Round-tripping through Blender is the practical way to
+#: get Mixamo motion onto an R15, because Mixamo exports FBX and DAE and no BVH
+#: at all; Blender is the converter, and this mapping is what receives it.
+ROBLOX_R15 = SkeletonMapping(
+    name="r15",
+    aliases=("roblox", "blender-r15"),
+    joints={
+        "left_shoulder": ("LeftUpperArm", "DEF_LeftUpperArm", "LeftUpperArm.L"),
+        "right_shoulder": ("RightUpperArm", "DEF_RightUpperArm", "RightUpperArm.R"),
+        "left_elbow": ("LeftLowerArm", "DEF_LeftLowerArm"),
+        "right_elbow": ("RightLowerArm", "DEF_RightLowerArm"),
+        "left_wrist": ("LeftHand", "DEF_LeftHand"),
+        "right_wrist": ("RightHand", "DEF_RightHand"),
+        "left_index": ("LeftHand_End",),
+        "right_index": ("RightHand_End",),
+        "left_hip": ("LeftUpperLeg", "DEF_LeftUpperLeg"),
+        "right_hip": ("RightUpperLeg", "DEF_RightUpperLeg"),
+        "left_knee": ("LeftLowerLeg", "DEF_LeftLowerLeg"),
+        "right_knee": ("RightLowerLeg", "DEF_RightLowerLeg"),
+        "left_ankle": ("LeftFoot", "DEF_LeftFoot"),
+        "right_ankle": ("RightFoot", "DEF_RightFoot"),
+        "left_foot_index": ("LeftFoot_End", "LeftToe"),
+        "right_foot_index": ("RightFoot_End", "RightToe"),
+        "nose": ("Head", "DEF_Head"),
+    },
+    head_tip=("Head_End", "HeadTop_End"),
+    notes="Roblox part names, as used by Blender R15 rigs and Roblox exporters.",
+)
+
+SKELETONS: dict[str, SkeletonMapping] = {MIXAMO.name: MIXAMO, ROBLOX_R15.name: ROBLOX_R15}
 for _mapping in list(SKELETONS.values()):
     for _alias in _mapping.aliases:
         SKELETONS[_alias] = _mapping

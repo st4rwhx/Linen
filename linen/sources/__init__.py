@@ -9,10 +9,18 @@ so Linen sits downstream of them instead of duplicating them.
 from __future__ import annotations
 
 from .bvh import BvhError, BvhMotion, parse_bvh
-from .skeletons import MIXAMO, SKELETONS, SkeletonMapping, get_skeleton, to_landmark_track
+from .skeletons import (
+    MIXAMO,
+    ROBLOX_R15,
+    SKELETONS,
+    SkeletonMapping,
+    get_skeleton,
+    to_landmark_track,
+)
 
 __all__ = [
     "MIXAMO",
+    "ROBLOX_R15",
     "SKELETONS",
     "BvhError",
     "BvhMotion",
