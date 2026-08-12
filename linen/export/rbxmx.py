@@ -73,11 +73,20 @@ def build_keyframe_sequence(
     angular_tolerance_deg: float = 1.0,
     position_tolerance_studs: float = 0.02,
     frames: list[int] | None = None,
+    markers: dict[int, list[tuple[str, str]]] | None = None,
 ) -> ET.ElementTree:
     """Build the XML tree for ``clip``.
 
     ``frames`` overrides keyframe reduction when you want every sampled frame,
     e.g. ``list(range(clip.frame_count))``.
+
+    ``markers`` maps a frame to ``(name, value)`` pairs written as
+    ``KeyframeMarker`` instances. At runtime Roblox fires
+    ``AnimationTrack:GetMarkerReachedSignal(name)`` with the value the moment
+    playback reaches that keyframe — which is how a gunshot lands on the frame
+    the hand opens rather than a tenth of a second around it. Markers force
+    their frame to be kept even when reduction would otherwise drop it, since
+    an event on a discarded keyframe simply never fires.
     """
     if easing_style not in EASING_STYLES:
         raise ValueError(
@@ -104,14 +113,27 @@ def build_keyframe_sequence(
     if clip.root_positions is not None and not np.isfinite(clip.root_positions).all():
         raise ValueError("root_positions contain non-finite values")
 
+    markers = markers or {}
+
     if frames is None:
         frames = reduce_keyframes(
             clip,
             angular_tolerance_deg=angular_tolerance_deg,
             position_tolerance_studs=position_tolerance_studs,
         )
+    # A marker on a frame reduction discarded would never fire, so the frames
+    # events need are non-negotiable.
+    if markers:
+        frames = sorted(set(frames) | {f for f in markers if 0 <= f < clip.frame_count})
     if not frames:
         raise ValueError("no keyframes to write")
+
+    unknown = {f for f in markers if not 0 <= f < clip.frame_count}
+    if unknown:
+        raise ValueError(
+            f"markers fall outside the clip's {clip.frame_count} frames: "
+            f"{sorted(unknown)}"
+        )
 
     referents = _Referents()
     root = ET.Element("roblox", _ROBLOX_ATTRS)
@@ -145,6 +167,14 @@ def build_keyframe_sequence(
             EASING_STYLES[easing_style],
             EASING_DIRECTIONS[easing_direction],
         )
+
+        for name, value in markers.get(frame, ()):
+            marker = ET.SubElement(
+                keyframe, "Item", {"class": "KeyframeMarker", "referent": referents.take()}
+            )
+            marker_props = ET.SubElement(marker, "Properties")
+            _string(marker_props, "Name", name)
+            _string(marker_props, "Value", value)
 
     ET.indent(root, space="  ")
     return ET.ElementTree(root)

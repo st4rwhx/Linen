@@ -1,0 +1,51 @@
+{
+  "name": "Disarm",
+  "fps": 30,
+  "notes": "Le scénario complet : Hero désarme Thug, le pistolet part au mur, la caméra suit l'impact et revient, puis la réplique. Tout est ancré sur le cue 'disarm' — retime-le et l'ensemble suit.",
+
+  "actors": [
+    { "name": "Hero", "rig": "R15", "position": [0, 0, 0], "facing": "Thug" },
+    { "name": "Thug", "rig": "R15", "position": [0, 0, -4], "facing": "Hero" }
+  ],
+
+  "props": [
+    { "name": "Pistol", "source": "ReplicatedStorage.Props.Pistol", "held_by": "Thug", "attach_to": "RightHand" }
+  ],
+
+  "shots": [
+    { "id": "two_shot", "position": [7, 3.5, -2], "look_at": "Hero", "fov": 50, "drift": [-0.4, 0, 0.3] },
+    { "id": "wall",     "position": [-3, 3, -9],  "look_at": "Wall", "fov": 32 },
+    { "id": "hero_cu",  "position": [2.5, 3.2, 1.5], "look_at": "Hero", "fov": 30, "blend": 0.25 }
+  ],
+
+  "cues": [
+    { "id": "approach", "actor": "Hero", "at": 0.0, "prompt": "marche", "duration": 1.2 },
+    { "id": "grab",     "actor": "Hero", "after": "approach", "prompt": "pointe vers l'avant", "duration": 0.6 },
+    { "id": "disarm",   "actor": "Hero", "after": "grab", "prompt": "coup de poing droite tres rapide et explosif" },
+    { "id": "settle",   "actor": "Hero", "after": "disarm", "prompt": "reste immobile", "duration": 2.4 },
+
+    { "id": "wait",     "actor": "Thug", "at": 0.0, "prompt": "reste immobile", "duration": 1.8 },
+    { "id": "flinch",   "actor": "Thug", "with": "disarm", "offset": 0.20, "prompt": "encaisse" },
+    { "id": "recoil",   "actor": "Thug", "after": "flinch", "prompt": "recule vite", "duration": 1.0 }
+  ],
+
+  "events": [
+    { "kind": "prop",   "cue": "disarm", "offset": 0.14, "actor": "Thug", "prop": "Pistol", "action": "throw", "impulse": [0, 9, -75] },
+    { "kind": "sound",  "cue": "disarm", "offset": 0.14, "actor": "Hero", "asset": "rbxassetid://0", "volume": 1 },
+
+    { "kind": "camera", "cue": "disarm", "offset": 0.34, "shot": "wall" },
+    { "kind": "vfx",    "cue": "disarm", "offset": 0.46, "effect": "WallImpact", "at_part": "Wall" },
+    { "kind": "sound",  "cue": "disarm", "offset": 0.46, "asset": "rbxassetid://0", "volume": 0.8 },
+    { "kind": "camera", "cue": "disarm", "offset": 0.90, "shot": "two_shot" },
+
+    { "kind": "face",   "cue": "settle", "offset": 0.10, "actor": "Hero", "expression": "smug", "hold": 3.0 },
+    { "kind": "camera", "cue": "settle", "offset": 0.25, "shot": "hero_cu" },
+    { "kind": "line",   "cue": "settle", "offset": 0.35, "actor": "Hero", "text": "Hahaha, you couldn't even swing me!", "hold": 2.2 },
+    { "kind": "sound",  "cue": "settle", "offset": 0.35, "actor": "Hero", "asset": "rbxassetid://0" },
+
+    { "kind": "face",   "cue": "recoil", "offset": 0.05, "actor": "Thug", "expression": "afraid", "hold": 2.5 },
+    { "kind": "camera", "cue": "settle", "offset": 2.00, "shot": "two_shot" },
+    { "kind": "line",   "cue": "settle", "offset": 2.10, "actor": "Thug", "text": "Nooo...", "hold": 1.5 },
+    { "kind": "sound",  "cue": "settle", "offset": 2.10, "actor": "Thug", "asset": "rbxassetid://0" }
+  ]
+}

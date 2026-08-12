@@ -8,7 +8,7 @@ One track per actor, all started together at t=0, cannot drift.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -40,6 +40,11 @@ class BuiltScene:
     #: actor name -> the clip covering the whole scene.
     clips: dict[str, AnimationClip]
     schedule: list[ScheduledCue]
+    #: actor -> frame -> KeyframeMarkers, for the events that ride an animation.
+    markers: dict[str, dict[int, list[tuple[str, str]]]] = field(default_factory=dict)
+    #: Events with no actor — camera cuts, world effects — on the director's
+    #: clock, in seconds.
+    director: list[tuple[float, object]] = field(default_factory=list)
 
     @property
     def duration(self) -> float:
@@ -55,7 +60,51 @@ def build_scene(
     planned = _plan_cues(scene, planner)
     schedule = _schedule(scene, planned)
     clips = _splice(scene, schedule, seed)
-    return BuiltScene(scene=scene, clips=clips, schedule=schedule)
+    markers, director = _place_events(scene, schedule)
+    return BuiltScene(
+        scene=scene,
+        clips=clips,
+        schedule=schedule,
+        markers=markers,
+        director=director,
+    )
+
+
+def _place_events(scene: Scene, schedule: list[ScheduledCue]):
+    """Turn cue-anchored events into frame markers and director-clock entries.
+
+    An event on an actor becomes a KeyframeMarker inside that actor's
+    animation, so it survives publishing and stays attached if the clip is
+    retimed in Studio. An event with no actor has no animation to ride and goes
+    on the director's clock instead.
+    """
+    starts = {entry.cue.id: entry.start for entry in schedule}
+    markers: dict[str, dict[int, list[tuple[str, str]]]] = {}
+    director: list[tuple[float, object]] = []
+
+    for event in scene.events:
+        when = starts[event.cue] + event.offset
+        if when < 0:
+            raise SceneError(
+                f"{event.kind} event on cue {event.cue!r} fires at {when:.2f}s, "
+                f"before the scene begins"
+            )
+        if event.actor is None:
+            director.append((round(when, 4), event))
+            continue
+
+        frame = int(round(when * scene.fps))
+        clip_frames = max(int(round(max(e.end for e in schedule) * scene.fps)) + 1, 1)
+        if not 0 <= frame < clip_frames:
+            raise SceneError(
+                f"{event.kind} event on cue {event.cue!r} fires at {when:.2f}s, "
+                f"past the end of the scene"
+            )
+        by_frame = markers.setdefault(event.actor, {})
+        by_frame.setdefault(frame, []).append((event.marker_name, event.marker_value()))
+
+    director.sort(key=lambda pair: pair[0])
+    return markers, director
 
 
 def _plan_cues(scene: Scene, planner: str) -> dict[str, tuple[MotionPlan, str]]:

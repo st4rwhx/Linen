@@ -280,3 +280,86 @@ def test_quotes_in_a_prompt_cannot_break_the_generated_lua():
     script = scene_script(built)
     assert '\\"go\\"' in script
     assert '\\"salut\\"' in script
+
+
+# --- events, props, shots ---------------------------------------------------
+DISARM = json.loads(__import__("pathlib").Path("examples/disarm.scene.json").read_text())
+
+
+def test_the_full_cinematic_scenario_builds():
+    built = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
+    assert set(built.clips) == {"Hero", "Thug"}
+    assert built.markers, "actor-bound events must become keyframe markers"
+    assert built.director, "camera cuts and world effects go on the director clock"
+
+
+def test_events_bound_to_an_actor_become_markers_in_that_actors_animation():
+    built = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
+    names = {
+        name
+        for frames in built.markers.values()
+        for entries in frames.values()
+        for name, _ in entries
+    }
+    assert {"linen_prop", "linen_sound", "linen_face", "linen_line"} <= names
+
+
+def test_camera_cuts_have_no_actor_so_they_ride_the_director_clock():
+    built = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
+    kinds = {event.kind for _, event in built.director}
+    assert "camera" in kinds
+    assert "vfx" in kinds
+
+
+def test_retiming_a_cue_moves_every_event_hanging_off_it():
+    """The whole point of anchoring events rather than timestamping them."""
+    early = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
+    data = json.loads(json.dumps(DISARM))
+    next(c for c in data["cues"] if c["id"] == "approach")["duration"] = 3.2
+    late = build_scene(Scene.from_dict(data), **OFFLINE)
+
+    def camera_times(built):
+        return [t for t, e in built.director if e.kind == "camera"]
+
+    shift = 3.2 - 1.2
+    assert camera_times(late) == pytest.approx([t + shift for t in camera_times(early)])
+
+
+def test_a_marker_forces_its_frame_to_survive_keyframe_reduction():
+    from linen.export import build_keyframe_sequence, reduce_keyframes
+
+    built = build_scene(Scene.from_dict(json.loads(json.dumps(DISARM))), **OFFLINE)
+    clip = built.clips["Hero"]
+    markers = built.markers["Hero"]
+    reduced = reduce_keyframes(clip, angular_tolerance_deg=1.0)
+
+    tree = build_keyframe_sequence(clip, frames=reduced, markers=markers)
+    times = {
+        item.find("Properties").find("string[@name='Name']").text
+        for item in tree.getroot().find("Item").findall("Item")
+    }
+    for frame in markers:
+        assert f"Keyframe{frame}" in times, "an event on a dropped keyframe never fires"
+
+
+def test_an_event_naming_an_unknown_shot_is_rejected():
+    data = json.loads(json.dumps(DISARM))
+    data["events"].append({"kind": "camera", "cue": "disarm", "shot": "nope"})
+    with pytest.raises(SceneError, match="known shots"):
+        Scene.from_dict(data)
+
+
+def test_an_unknown_expression_lists_the_real_ones():
+    data = json.loads(json.dumps(DISARM))
+    data["events"].append(
+        {"kind": "face", "cue": "settle", "actor": "Hero", "expression": "constipated"}
+    )
+    with pytest.raises(SceneError, match="unknown expression"):
+        Scene.from_dict(data)
+
+
+def test_a_prop_held_by_someone_absent_is_rejected():
+    data = json.loads(json.dumps(DISARM))
+    data["props"][0]["held_by"] = "Ghost"
+    with pytest.raises(SceneError, match="not in the cast"):
+        Scene.from_dict(data)

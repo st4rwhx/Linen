@@ -376,12 +376,19 @@ def _cmd_scene(args) -> int:
             if args.tolerance <= 0
             else reduce_keyframes(clip, angular_tolerance_deg=args.tolerance)
         )
-        write_rbxmx(clip, path, frames=frames)
-        print(f"{path}: {clip.rig.name}, {len(frames)} keyframes")
+        markers = built.markers.get(actor_name, {})
+        write_rbxmx(clip, path, frames=frames, markers=markers)
+        events = sum(len(v) for v in markers.values())
+        suffix = f", {events} marqueurs d'evenement" if events else ""
+        print(f"{path}: {clip.rig.name}, {len(frames)} keyframes{suffix}")
         if args.preview:
             from .export.preview import write_preview
 
             write_preview(clip, args.out / f"{scene.name}_{actor_name}.json")
+
+    if built.director:
+        print(f"  {len(built.director)} evenements sur l'horloge du realisateur "
+              f"(camera, effets de decor)")
 
     script = write_scene_script(
         built, args.out / f"{scene.name}.server.luau", folder=args.folder

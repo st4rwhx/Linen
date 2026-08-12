@@ -16,11 +16,12 @@ the last few centimetres are a manual nudge in the Animation Editor.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ..generate.timing import STRATEGIES
 from ..rigs import RIGS
+from .events import Event, EventError, Prop, Shot, event_from_dict
 
 Vec3 = tuple[float, float, float]
 
@@ -114,6 +115,13 @@ class Scene:
     cues: list[Cue]
     fps: float = 30.0
     notes: str = ""
+    #: Objects characters hold, drop or throw.
+    props: list[Prop] = field(default_factory=list)
+    #: Camera setups the director may cut to.
+    shots: list[Shot] = field(default_factory=list)
+    #: Sound, effects, expressions, props, camera and dialogue, each anchored
+    #: to a cue rather than to the clock.
+    events: list[Event] = field(default_factory=list)
 
     def validate(self) -> None:
         if not self.name.strip():
@@ -151,6 +159,20 @@ class Scene:
                         f"Known cues: {', '.join(sorted(seen))}"
                     )
 
+        # Props, shots and events raise EventError; whoever wrote the scene does
+        # not care which module noticed, so they all surface as SceneError.
+        shot_ids = {shot.id for shot in self.shots}
+        prop_names = {prop.name for prop in self.props}
+        try:
+            for prop in self.props:
+                prop.validate(cast)
+            for shot in self.shots:
+                shot.validate()
+            for event in self.events:
+                event.validate(cast, seen, shot_ids, prop_names)
+        except EventError as exc:
+            raise SceneError(str(exc)) from None
+
     def _assign_ids(self) -> None:
         counters: dict[str, int] = {}
         for cue in self.cues:
@@ -173,13 +195,18 @@ class Scene:
     def from_dict(cls, data: dict[str, Any]) -> "Scene":
         if not isinstance(data, dict):
             raise SceneError(f"expected a JSON object, got {type(data).__name__}")
-        unknown = set(data) - {"name", "actors", "cues", "fps", "notes"}
+        unknown = set(data) - {
+            "name", "actors", "cues", "fps", "notes", "props", "shots", "events",
+        }
         if unknown:
             raise SceneError(f"unexpected field(s): {', '.join(sorted(unknown))}")
 
         try:
             actors = [Actor(**_tuple_position(a)) for a in data.get("actors", [])]
             cues = [Cue(**_rename_with(c)) for c in data.get("cues", [])]
+            props = [Prop(**_tuple_field(p, "grip")) for p in data.get("props", [])]
+            shots = [Shot(**_tuple_field(s, "position", "drift")) for s in data.get("shots", [])]
+            events = [event_from_dict(e) for e in data.get("events", [])]
         except TypeError as exc:
             raise SceneError(f"malformed actor or cue: {exc}") from None
 
@@ -189,6 +216,9 @@ class Scene:
             cues=cues,
             fps=float(data.get("fps", 30.0)),
             notes=str(data.get("notes", "")),
+            props=props,
+            shots=shots,
+            events=events,
         )
         scene.validate()
         return scene
@@ -216,6 +246,15 @@ class Scene:
                 for cue in self.cues
             ],
         }
+
+
+def _tuple_field(data: dict[str, Any], *keys: str) -> dict[str, Any]:
+    """JSON has no tuples, so the vector fields arrive as lists."""
+    out = dict(data)
+    for key in keys:
+        if key in out and out[key] is not None:
+            out[key] = tuple(float(v) for v in out[key])
+    return out
 
 
 def _tuple_position(actor: dict[str, Any]) -> dict[str, Any]:
