@@ -112,13 +112,48 @@ def test_an_unknown_rig_is_rejected(tmp_path, recording, capsys):
     assert "unknown rig" in capsys.readouterr().err
 
 
-def test_prompt_without_any_key_says_what_to_do(monkeypatch, tmp_path, capsys):
+def _no_models(monkeypatch) -> None:
     from linen.generate import providers
 
     for provider in providers.PROVIDERS:
         monkeypatch.delenv(provider.env_key, raising=False)
-    assert main(["prompt", "a happy wave", "-o", str(tmp_path / "x.rbxmx")]) == 1
-    assert "no API key found" in capsys.readouterr().err
+    monkeypatch.setenv("LINEN_LOCAL_BASE_URL", "http://127.0.0.1:1/v1")
+
+
+def test_prompt_still_works_with_no_key_and_no_local_model(monkeypatch, tmp_path, capsys):
+    # The headline guarantee: prompt to animation, entirely offline and free.
+    _no_models(monkeypatch)
+    out = tmp_path / "wave.rbxmx"
+    assert main(["prompt", "salue puis marche", "-o", str(out)]) == 0
+    assert out.read_text().startswith("<?xml")
+    assert "plan from offline" in capsys.readouterr().out
+
+
+def test_forcing_a_model_planner_fails_loudly_instead(monkeypatch, tmp_path, capsys):
+    _no_models(monkeypatch)
+    assert main(
+        ["prompt", "salue", "--planner", "model", "-o", str(tmp_path / "x.rbxmx")]
+    ) == 1
+    assert "unreachable" in capsys.readouterr().err
+
+
+def test_offline_planner_writes_both_rigs_in_one_run(monkeypatch, tmp_path, capsys):
+    _no_models(monkeypatch)
+    assert main(
+        ["prompt", "saute", "--planner", "offline", "--rig", "both", "-o", str(tmp_path / "j.rbxmx")]
+    ) == 0
+    assert (tmp_path / "j.R15.rbxmx").exists()
+    assert (tmp_path / "j.R6.rbxmx").exists()
+    out = capsys.readouterr().out
+    assert "R15" in out and "R6" in out
+
+
+def test_retarget_writes_both_rigs_in_one_run(tmp_path, recording):
+    assert main(
+        ["retarget", str(recording), "--fps", "30", "--rig", "both", "-o", str(tmp_path / "t.rbxmx")]
+    ) == 0
+    assert "Left Arm" in (tmp_path / "t.R6.rbxmx").read_text()
+    assert "LeftUpperArm" in (tmp_path / "t.R15.rbxmx").read_text()
 
 
 def test_vocabulary_lists_poses_and_cycles(capsys):

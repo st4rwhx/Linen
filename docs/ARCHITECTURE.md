@@ -6,7 +6,8 @@
 FreeMoCap (.npy) ──┐
 BVH externe ───────┼─> LandmarkTrack ─> solveur ─┐
                    │                             ├─> AnimationClip ─┬─> .rbxmx
-prompt ─> plan ────┴──────> synthèse ────────────┘                  └─> .json
+prompt ─┬─ LLM ────┴──> MotionPlan ─> synthèse ──┘   (R15 et/ou R6) └─> .json
+        └─ offline ──┘
 ```
 
 Trois sources, une représentation, deux sorties. `AnimationClip`
@@ -140,6 +141,44 @@ grande majorité des échecs sans changer de fournisseur.
 `_coerce` est délibérément étroit : il complète un `fps` omis et déballe un plan
 imbriqué sous une clé parasite. Rien d'autre. Une mauvaise pose ou une timeline
 incohérente doit échouer, pour que le modèle l'apprenne.
+
+## Le planificateur hors-ligne
+
+[`offline.py`](../linen/generate/offline.py) produit le même `MotionPlan` sans
+modèle du tout. C'est du **matching de mots-clés**, dit tel quel dans le module :
+il ne comprend pas une phrase, il y reconnaît des mots.
+
+Ce qu'il a en revanche, c'est la partie qu'un LLM rate le plus souvent : le
+**timing**. Chaque action est une *beat sheet* écrite à la main — anticipation,
+action, settle, avec des durées volontairement contrastées. Un saut, par
+exemple, ne s'écrit pas « pose accroupie puis pose en l'air » : c'est un
+`crouch` court en `anticipate`, un décollage de 0,10 s, un apex qui *tient*
+0,34 s, une réception brève et un `overshoot` de retour. C'est ça qui fait le
+poids, et ça ne dépend d'aucun modèle.
+
+Trois invariants sont testés parce qu'ils cassent silencieusement :
+
+- toute pose et tout cycle cité par une action existe vraiment dans la banque,
+  **des deux côtés** pour les actions latéralisées ;
+- une action qui propose un choix gauche/droite doit templater *tous* ses beats
+  — un salut dont le cycle est câblé à droite ignorerait « de la main gauche »
+  sans rien signaler (bug réel, attrapé par ce test) ;
+- une boucle n'est proposée que si toutes les actions de la séquence sont
+  bouclables : boucler un saut renverrait le personnage en l'air d'un coup.
+
+Quand rien n'est reconnu, il produit un idle **et l'écrit dans `notes`**, avec
+la liste de ce qu'il sait faire. Un repli silencieux passerait pour un bug.
+
+## Choisir le rig
+
+`--rig` accepte `R15`, `R6` ou `both` sur toutes les commandes. Le cas `both`
+résout, synthétise et exporte une fois par rig, et suffixe les fichiers
+(`take.R15.rbxmx`, `take.R6.rbxmx`). Rien n'est partagé entre les deux passes :
+le solveur R6 lit ses propres `BoneSource`, et l'adaptation des poses vers R6
+(`R6_FROM_R15` dans [`synth.py`](../linen/generate/synth.py)) **laisse tomber**
+les coudes et les genoux plutôt que de replier leur flexion dans l'épaule ou la
+hanche — R6 n'a pas ces articulations, et les simuler lit plus mal que de ne
+rien faire.
 
 ## Étendre la banque de poses
 

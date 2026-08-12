@@ -11,7 +11,12 @@ from . import __version__
 from .clip import AnimationClip
 from .export import reduce_keyframes, write_rbxmx
 from .generate import MotionPlan, PlanError, synthesize
-from .generate.providers import PROVIDERS, NoProviderConfigured, configured_providers
+from .generate.providers import (
+    PROVIDERS,
+    NoProviderConfigured,
+    ProviderError,
+    configured_providers,
+)
 from .rigs import get_rig
 
 
@@ -39,7 +44,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         return handler(args)
-    except (PlanError, NoProviderConfigured, ValueError, FileNotFoundError) as exc:
+    except (
+        PlanError,
+        NoProviderConfigured,
+        ProviderError,
+        ValueError,
+        FileNotFoundError,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
@@ -47,7 +58,12 @@ def main(argv: list[str] | None = None) -> int:
 def _add_common_output(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-o", "--out", type=Path, required=True, help="output .rbxmx path")
     parser.add_argument(
-        "--rig", default="R15", help="target rig: R15 or R6 (default: R15)"
+        "--rig",
+        default="R15",
+        help=(
+            "target rig: R15, R6, or 'both' to write one file per rig "
+            "(suffixed .R15.rbxmx / .R6.rbxmx). Default: R15"
+        ),
     )
     parser.add_argument(
         "--tolerance",
@@ -113,6 +129,16 @@ def _add_prompt(sub) -> None:
     parser.add_argument("--fps", type=float, default=30.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
+        "--planner",
+        default="auto",
+        choices=("auto", "model", "offline"),
+        help=(
+            "auto: a language model if one answers, otherwise the offline "
+            "planner; model: fail rather than fall back; offline: never touch "
+            "the network (default: auto)"
+        ),
+    )
+    parser.add_argument(
         "--provider",
         default=None,
         help="force one provider by name instead of trying the whole chain",
@@ -131,44 +157,43 @@ def _add_synth(sub) -> None:
 
 
 # ---------------------------------------------------------------------------
-def _cmd_retarget(args) -> int:
-    from .retarget import SolveOptions, load_freemocap, solve_clip
+def _target_rigs(args) -> list:
+    """The rigs to write. ``--rig both`` covers R15 and R6 in one run."""
+    if args.rig.lower() == "both":
+        return [get_rig("R15"), get_rig("R6")]
+    return [get_rig(args.rig)]
 
-    rig = get_rig(args.rig)
+
+def _solve_all(args, track, name: str) -> list:
+    from .retarget import SolveOptions, solve_clip
+
+    options = SolveOptions(root_motion=args.root_motion, smoothing_frames=args.smoothing)
+    clips = []
+    for rig in _target_rigs(args):
+        clip = solve_clip(rig, track, options, name=name)
+        clip.loop = args.loop
+        clips.append(clip.with_loop_seam() if args.loop else clip)
+    return clips
+
+
+def _cmd_retarget(args) -> int:
+    from .retarget import load_freemocap
+
     track = load_freemocap(
         args.recording, fps=args.fps, units=args.units, convention=args.axes
     )
-    clip = solve_clip(
-        rig,
-        track,
-        SolveOptions(root_motion=args.root_motion, smoothing_frames=args.smoothing),
-        name=args.name or args.recording.stem,
-    )
-    clip.loop = args.loop
-    if args.loop:
-        clip = clip.with_loop_seam()
-    return _write(clip, args)
+    return _write(_solve_all(args, track, args.name or args.recording.stem), args)
 
 
 def _cmd_bvh(args) -> int:
-    from .retarget import SolveOptions, solve_clip
     from .sources import load_bvh
 
     track = load_bvh(args.file, skeleton=args.skeleton, units=args.units, fps=args.fps)
-    clip = solve_clip(
-        get_rig(args.rig),
-        track,
-        SolveOptions(root_motion=args.root_motion, smoothing_frames=args.smoothing),
-        name=args.name or args.file.stem,
-    )
-    clip.loop = args.loop
-    if args.loop:
-        clip = clip.with_loop_seam()
-    return _write(clip, args)
+    return _write(_solve_all(args, track, args.name or args.file.stem), args)
 
 
 def _cmd_prompt(args) -> int:
-    from .generate import plan_from_prompt
+    from .generate.choreographer import plan_for_prompt
 
     providers = None
     if args.provider:
@@ -181,8 +206,10 @@ def _cmd_prompt(args) -> int:
             )
         providers = (BY_NAME[args.provider],)
 
-    plan, provider = plan_from_prompt(args.text, fps=args.fps, providers=providers)
-    print(f"plan from {provider}: {len(plan.segments)} segments, {plan.duration:.2f}s")
+    plan, source = plan_for_prompt(
+        args.text, fps=args.fps, planner=args.planner, providers=providers
+    )
+    print(f"plan from {source}: {len(plan.segments)} segments, {plan.duration:.2f}s")
     if plan.notes:
         print(f"  notes: {plan.notes}")
     if args.save_plan:
@@ -190,14 +217,16 @@ def _cmd_prompt(args) -> int:
         args.save_plan.write_text(json.dumps(plan.to_dict(), indent=2))
         print(f"  plan -> {args.save_plan}")
 
-    clip = synthesize(plan, get_rig(args.rig), seed=args.seed)
-    return _write(clip, args)
+    return _write(_synthesize_all(plan, args), args)
 
 
 def _cmd_synth(args) -> int:
     plan = MotionPlan.from_dict(json.loads(args.plan.read_text()))
-    clip = synthesize(plan, get_rig(args.rig), seed=args.seed)
-    return _write(clip, args)
+    return _write(_synthesize_all(plan, args), args)
+
+
+def _synthesize_all(plan: MotionPlan, args) -> list:
+    return [synthesize(plan, rig, seed=args.seed) for rig in _target_rigs(args)]
 
 
 def _cmd_providers(_args) -> int:
@@ -213,33 +242,49 @@ def _cmd_providers(_args) -> int:
 
 def _cmd_vocabulary(_args) -> int:
     from .generate import CYCLES, POSES
+    from .generate.offline import ACTIONS
 
-    print("poses:")
+    print("poses (what a plan may schedule):")
     for name in sorted(POSES):
         print(f"  {name}")
-    print("cycles:")
+    print("\ncycles:")
     for name, cycle in sorted(CYCLES.items()):
-        print(f"  {name:<8} {cycle.default_rate} Hz, keys: {len(cycle.keys)}")
+        print(f"  {name:<12} {cycle.default_rate} Hz, {len(cycle.keys)} keys")
+    print("\noffline planner actions (words it recognises in a prompt):")
+    for action in ACTIONS:
+        flags = "".join(
+            (" sided" if action.sided else "", " loopable" if action.loopable else "")
+        )
+        print(f"  {action.name:<12} {', '.join(action.keywords)}{flags}")
     return 0
 
 
-def _write(clip: AnimationClip, args) -> int:
-    frames = (
-        list(range(clip.frame_count))
-        if args.tolerance <= 0
-        else reduce_keyframes(clip, angular_tolerance_deg=args.tolerance)
-    )
-    path = write_rbxmx(clip, args.out, frames=frames)
-    print(
-        f"{path}: {clip.rig.name}, {clip.frame_count} frames -> {len(frames)} keyframes, "
-        f"{clip.duration:.2f}s"
-    )
-    if args.preview:
-        from .export.preview import write_preview
+def _write(clips: list[AnimationClip], args) -> int:
+    for clip in clips:
+        out = _suffixed(args.out, clip.rig.name, len(clips) > 1)
+        frames = (
+            list(range(clip.frame_count))
+            if args.tolerance <= 0
+            else reduce_keyframes(clip, angular_tolerance_deg=args.tolerance)
+        )
+        path = write_rbxmx(clip, out, frames=frames)
+        print(
+            f"{path}: {clip.rig.name}, {clip.frame_count} frames -> "
+            f"{len(frames)} keyframes, {clip.duration:.2f}s"
+        )
+        if args.preview:
+            from .export.preview import write_preview
 
-        print(f"{write_preview(clip, args.preview)}: viewport clip")
+            preview = _suffixed(args.preview, clip.rig.name, len(clips) > 1)
+            print(f"{write_preview(clip, preview)}: viewport clip")
+
     print("import into Studio with Animation Editor > ... > Import > From File")
     return 0
+
+
+def _suffixed(path: Path, rig: str, multiple: bool) -> Path:
+    """``take.rbxmx`` becomes ``take.R15.rbxmx`` when writing more than one rig."""
+    return path.with_suffix(f".{rig}{path.suffix}") if multiple else path
 
 
 if __name__ == "__main__":

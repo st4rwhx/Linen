@@ -54,10 +54,18 @@ class Provider:
     style: str = "openai"
     #: Free tier notes, surfaced in `linen providers` so the choice is informed.
     notes: str = ""
+    #: A server on this machine — Ollama, llama.cpp, LM Studio. Needs no key,
+    #: is always tried first, and drops out of the chain quickly when nothing
+    #: is listening.
+    local: bool = False
 
     @property
     def model(self) -> str:
         return os.environ.get(f"LINEN_{self.name.upper()}_MODEL", self.default_model)
+
+    @property
+    def endpoint(self) -> str:
+        return os.environ.get(f"LINEN_{self.name.upper()}_BASE_URL", self.base_url)
 
     @property
     def api_key(self) -> str | None:
@@ -65,13 +73,30 @@ class Provider:
 
     @property
     def configured(self) -> bool:
-        return self.api_key is not None
+        return self.local or self.api_key is not None
+
+    @property
+    def timeout(self) -> float:
+        # A local model that is not running should cost a moment, not a minute.
+        return 5.0 if self.local else DEFAULT_TIMEOUT
 
 
-#: Ordered by how much free headroom they tend to offer, best first.  Model IDs
-#: are defaults as of writing; providers rename models often, so override with
-#: ``LINEN_<PROVIDER>_MODEL`` rather than treating these as guaranteed.
+#: A local server first — no key, no quota, nothing leaves the machine — then
+#: the hosted free tiers ordered by how much headroom they tend to offer.  Model
+#: IDs are defaults as of writing; providers rename models often, so override
+#: with ``LINEN_<PROVIDER>_MODEL`` rather than treating these as guaranteed.
 PROVIDERS: tuple[Provider, ...] = (
+    Provider(
+        "local",
+        "LINEN_LOCAL_API_KEY",
+        "http://localhost:11434/v1",
+        "llama3.1",
+        local=True,
+        notes=(
+            "Ollama, llama.cpp or LM Studio on this machine. No key, no quota, "
+            "no network. Point elsewhere with LINEN_LOCAL_BASE_URL."
+        ),
+    ),
     Provider(
         "gemini",
         "GEMINI_API_KEY",
@@ -142,22 +167,29 @@ def complete_json(
     candidates = providers if providers is not None else configured_providers()
     if not candidates:
         raise NoProviderConfigured(
-            "no API key found. Set one of: "
-            + ", ".join(p.env_key for p in PROVIDERS)
-            + " — or write the motion plan by hand and use `linen synth`."
+            "no language model available. Run one locally (Ollama), set one of: "
+            + ", ".join(p.env_key for p in PROVIDERS if not p.local)
+            + " — or use the offline planner, which needs neither."
         )
 
     last: Exception | None = None
     for provider in candidates:
         try:
-            raw = _request(provider, system, user, schema, temperature, timeout)
+            raw = _request(
+                provider,
+                system,
+                user,
+                schema,
+                temperature,
+                min(timeout, provider.timeout),
+            )
             return _parse_json(provider.name, raw), provider.name
         except ProviderError as exc:
             if not exc.retryable:
                 raise
             last = exc
-        except (urllib.error.URLError, TimeoutError) as exc:
-            last = ProviderError(provider.name, f"network error: {exc}")
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            last = ProviderError(provider.name, f"unreachable: {exc}")
 
     raise last  # type: ignore[misc]
 
@@ -172,7 +204,7 @@ def _request(
 ) -> str:
     if provider.style == "gemini":
         url = (
-            f"{provider.base_url}/models/{provider.model}:generateContent"
+            f"{provider.endpoint}/models/{provider.model}:generateContent"
             f"?key={provider.api_key}"
         )
         generation: dict[str, Any] = {
@@ -188,7 +220,7 @@ def _request(
         }
         headers = {"Content-Type": "application/json"}
     else:
-        url = f"{provider.base_url}/chat/completions"
+        url = f"{provider.endpoint}/chat/completions"
         payload = {
             "model": provider.model,
             "temperature": temperature,
@@ -198,10 +230,11 @@ def _request(
             ],
             "response_format": {"type": "json_object"},
         }
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {provider.api_key}",
-        }
+        headers = {"Content-Type": "application/json"}
+        # Local servers accept no credentials, and sending "Bearer None" is how
+        # you get a confusing 401 out of one that decides to check.
+        if provider.api_key:
+            headers["Authorization"] = f"Bearer {provider.api_key}"
 
     request = urllib.request.Request(
         url, data=json.dumps(payload).encode(), headers=headers, method="POST"

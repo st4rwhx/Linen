@@ -11,7 +11,8 @@ from __future__ import annotations
 from typing import Any
 
 from . import posebook
-from .providers import Provider, complete_json
+from .offline import plan_offline
+from .providers import NoProviderConfigured, Provider, ProviderError, complete_json
 from .schema import EASINGS, LAYER_KINDS, PRIORITIES, MotionPlan, PlanError, json_schema
 
 MAX_REPAIR_ROUNDS = 2
@@ -67,6 +68,42 @@ def build_system_prompt() -> str:
         layers=", ".join(LAYER_KINDS),
         priorities=", ".join(PRIORITIES),
     )
+
+
+PLANNERS = ("auto", "model", "offline")
+
+
+def plan_for_prompt(
+    prompt: str,
+    *,
+    fps: float = 30.0,
+    planner: str = "auto",
+    providers: tuple[Provider, ...] | None = None,
+    temperature: float = 0.4,
+) -> tuple[MotionPlan, str]:
+    """Plan ``prompt``, choosing between a language model and the offline path.
+
+    ``auto`` prefers a model — a local one first, since that is free and stays
+    on the machine — and falls back to :func:`plan_offline` when none answers,
+    so the command always produces an animation. ``offline`` never touches the
+    network at all.
+    """
+    if planner not in PLANNERS:
+        raise ValueError(
+            f"unknown planner {planner!r}; expected one of {', '.join(PLANNERS)}"
+        )
+
+    if planner == "offline":
+        return plan_offline(prompt, fps=fps), "offline"
+
+    try:
+        return plan_from_prompt(
+            prompt, fps=fps, providers=providers, temperature=temperature
+        )
+    except (NoProviderConfigured, ProviderError, PlanError):
+        if planner == "model":
+            raise
+        return plan_offline(prompt, fps=fps), "offline"
 
 
 def plan_from_prompt(

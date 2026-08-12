@@ -323,13 +323,24 @@ CYCLES: dict[str, Cycle] = {
         default_rate=1.6,
         tags=("locomotion",),
     ),
-    "wave": Cycle(
-        "wave",
+    # Both hands, because a plan that asks to wave with the left one and gets
+    # the right one back is worse than not offering the choice at all.
+    "wave_left": Cycle(
+        "wave_left",
+        ((0.0, "wave_left_up"), (0.5, "wave_left_out")),
+        default_rate=2.0,
+        tags=("gesture",),
+    ),
+    "wave_right": Cycle(
+        "wave_right",
         ((0.0, "wave_right_up"), (0.5, "wave_right_out")),
         default_rate=2.0,
         tags=("gesture",),
     ),
 }
+
+#: Kept so plans written against the single-handed vocabulary still load.
+CYCLES["wave"] = CYCLES["wave_right"]
 
 
 def pose_names() -> tuple[str, ...]:

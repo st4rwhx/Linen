@@ -4,12 +4,16 @@ Des animations Roblox **R15 / R6** à partir de FreeMoCap — et à partir d'un
 prompt texte, sans coût d'API.
 
 ```bash
-# une capture FreeMoCap -> un fichier importable dans Studio
-linen retarget mediapipe_body_3d_xyz.npy --fps 30 -o wave.rbxmx
+# un prompt -> une animation. Aucune clé, aucun GPU, aucun réseau.
+linen prompt "salue de la main gauche puis marche" --planner offline --rig both -o hello.rbxmx
+#   -> hello.R15.rbxmx  +  hello.R6.rbxmx
 
-# un prompt -> un plan -> la même sortie
-linen prompt "un salut amical, puis le personnage repart au pas" -o hello.rbxmx
+# une capture FreeMoCap -> un fichier importable dans Studio
+linen retarget mediapipe_body_3d_xyz.npy --fps 30 --rig R6 -o wave.rbxmx
 ```
+
+`--rig` vaut `R15`, `R6` ou `both` sur **toutes** les commandes : le choix du
+rig appartient à l'utilisateur, jamais à l'outil.
 
 ---
 
@@ -64,20 +68,25 @@ MDM, et la génération suivante. Même famille de technologie, zéro crédit, z
 plafond. C'est ça, la vraie réponse à « prompt → animation, gratuit, sans
 sacrifier la qualité ».
 
-**Ce que Linen fait de tout ça.** Deux choses, et pas de concurrence frontale :
+**Ce que Linen fait de tout ça.** Trois chemins, du plus lourd au plus léger,
+tous aboutissant à du R15/R6 :
 
 - **Il ingère leur sortie.** `linen bvh` prend un BVH — export SayMotion, MoMask
   ou MDM lancé en local, téléchargement Mixamo — et le recible sur R15/R6 avec
   le même solveur, les mêmes conventions et le même exporteur que la voie
   FreeMoCap. Un test vérifie que les deux chemins donnent la même chose sur la
   même pose. Linen est le tuyau, pas un concurrent du modèle.
-- **Il fournit une voie 100 % hors ligne**, pour quand il n'y a ni crédit ni
-  GPU : **le LLM dirige, il n'anime pas.** Le modèle reçoit un vocabulaire de
-  poses et de cycles et renvoie un *plan* — quelle pose à quel instant, avec
-  quel easing, quelle énergie. Un synthétiseur déterministe fait le reste.
+- **Il parle à un LLM local.** Ollama, llama.cpp ou LM Studio sur ta machine :
+  aucune clé, aucun quota, rien ne sort. C'est le premier fournisseur de la
+  chaîne, et il tombe en une poignée de secondes si rien n'écoute.
+- **Et il a un planificateur qui ne demande rien du tout** — ni clé, ni GPU, ni
+  réseau, ni téléchargement. C'est `--planner offline`, et c'est ce qui rend la
+  phrase « prompt to animation, local et gratuit » vraie sans astérisque.
 
-Sur cette seconde voie, la qualité vient de trois choses toutes gratuites et
-sous notre contrôle :
+Dans les deux derniers cas le principe est le même : **le planificateur dirige,
+il n'anime pas.** Il produit un *plan* — quelle pose à quel instant, avec quel
+easing, quelle énergie — et un synthétiseur déterministe fait le reste. La
+qualité vient de trois choses toutes gratuites et sous notre contrôle :
 
 - **les poses clés**, écrites à la main une fois pour toutes
   ([`posebook.py`](linen/generate/posebook.py)) — ou capturées avec FreeMoCap,
@@ -103,13 +112,16 @@ appel : même un quota gratuit serré tient largement. La synthèse, elle, est
 locale et gratuite pour de bon — `linen synth` sur un plan écrit à la main ne
 touche jamais le réseau.
 
-### En résumé, trois sources pour la même sortie
+### En résumé
 
-| Source | Qualité | Coût | Quand |
-| --- | --- | --- | --- |
-| `linen retarget` — capture FreeMoCap | La meilleure | Gratuit | Tu peux filmer le mouvement |
-| `linen bvh` — SayMotion, NoCapMocap, MoMask/MDM local | Très bonne | Crédits, ou gratuit en local | Tu ne peux pas filmer |
-| `linen prompt` / `linen synth` — plan + poses | Correcte, déterministe | Gratuit | Ni caméra, ni crédit, ni GPU |
+| Source | Qualité | Coût | Réseau | Quand |
+| --- | --- | --- | --- | --- |
+| `linen retarget` — capture FreeMoCap | La meilleure | Gratuit | Non | Tu peux filmer le mouvement |
+| `linen bvh` — SayMotion, MoMask/MDM local | Très bonne | Crédits, ou gratuit en local | Selon | Tu ne peux pas filmer |
+| `linen prompt` — LLM local (Ollama) | Correcte, plans variés | Gratuit | Non | Tu as un LLM installé |
+| `linen prompt --planner offline` | Correcte, déterministe | Gratuit | **Jamais** | Rien d'installé du tout |
+
+Toutes écrivent du R15, du R6, ou les deux.
 
 ---
 
@@ -167,13 +179,44 @@ remarque.
 
 ### Générer depuis un prompt
 
+**Sans rien installer** — le planificateur hors-ligne :
+
 ```bash
-export GEMINI_API_KEY=...
-linen prompt "esquive à droite, contre-attaque, retour en garde" \
-  -o dodge.rbxmx --save-plan dodge.plan.json
+linen prompt "saute deux fois puis célèbre" --planner offline -o jump.rbxmx
 ```
 
-`linen providers` liste les fournisseurs et lesquels sont configurés.
+Il reconnaît des mots-clés en français et en anglais et assemble un plan à
+partir de *beat sheets* écrites à la main : anticipation, action, settle, avec
+des durées contrastées. Il ne comprend pas une phrase, il y **reconnaît des
+mots** — et il le dit dans ses `notes` quand il ne reconnaît rien.
+
+| Il connaît | Exemples de mots |
+| --- | --- |
+| actions | salut/wave, marche/walk, cours/run, saute/jump, accroupi/crouch, assis/sit, poing/punch, pointe/point, célèbre/cheer, idle |
+| côté | gauche/left, droite/right |
+| vitesse | vite, très rapide, lentement, doucement |
+| énergie | explosif, puissant, fatigué, mou |
+| répétition | deux fois, trois fois, twice |
+| boucle | en boucle, loop (refusée si un saut traîne dans la séquence) |
+| enchaînement | puis, ensuite, et, then, virgules |
+
+`linen vocabulary` liste tout, y compris les mots-clés exacts.
+
+**Avec un LLM local** — plans plus variés, toujours zéro coût et zéro réseau
+sortant :
+
+```bash
+ollama serve && ollama pull llama3.1        # une fois
+linen prompt "esquive à droite, contre-attaque, retour en garde" -o dodge.rbxmx
+```
+
+Linen essaie `http://localhost:11434/v1` d'abord (surchargeable par
+`LINEN_LOCAL_BASE_URL`, donc LM Studio et llama.cpp marchent aussi), puis les
+API distantes si une clé est présente, puis retombe sur le planificateur
+hors-ligne. `--planner model` refuse ce repli et échoue franchement à la place.
+
+**Avec une API distante** — `export GEMINI_API_KEY=...`, et `linen providers`
+liste ce qui est configuré.
 
 Le plan sauvegardé est un JSON court, relisible et modifiable à la main :
 
