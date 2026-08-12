@@ -5,10 +5,23 @@ produces, and pose names are the part names — that pairing is what lets the
 Animation Editor load an exported ``KeyframeSequence`` onto a rig it did not
 create.
 
-Part sizes are the defaults of the Studio "Build Rig" R15 block character,
-rounded to two decimals.  They only drive the preview skeleton; an animation
-retargeted onto a differently proportioned avatar is unaffected because we
-solve and export rotations, never positions.
+Part sizes and offsets are **measured**, not estimated: they come from Roblox's
+own ``ClassicMannequin.fbx`` reference file, read by ``tools/read_fbx_skeleton.py``
+and reproducible from it.  The figure comes out 4.98 studs tall, which is what
+Roblox documents.
+
+Two corrections are applied to the raw measurements.  The mannequin is modelled
+in an A-pose while the rig rests with its arms down, so each shoulder joint is
+recovered from the A-posed arm centre and the arm re-hung vertically.  And the
+mannequin's left side is +X where a Roblox character's own left is -X, so the
+sides are mirrored.
+
+None of this reaches the exported animation, which is rotations only — but it is
+not decoration either.  Stride is measured by posing this geometry, and stride
+is what the runtime divides ground speed by to stop the feet skating, so limb
+lengths that are wrong here produce feet that slide there.  Two earlier versions
+of this file were wrong — once by a factor of two — and neither error surfaced
+until the rig was finally drawn and then measured against the source.
 """
 
 from __future__ import annotations
@@ -27,7 +40,7 @@ PARTS: tuple[Part, ...] = (
         "HumanoidRootPart",
         "Root",
         aim_axis=_UP,
-        size=(2.0, 0.4, 1.0),
+        size=(1.33, 0.41, 0.72),
         rest_offset=(0.0, 0.0, 0.0),
     ),
     Part(
@@ -35,33 +48,37 @@ PARTS: tuple[Part, ...] = (
         "LowerTorso",
         "Waist",
         aim_axis=_UP,
-        size=(2.0, 1.6, 1.0),
-        rest_offset=(0.0, 1.0, 0.0),
+        size=(1.30, 1.70, 0.84),
+        rest_offset=(0.0, 0.794, 0.051),
     ),
     Part(
         "Head",
         "UpperTorso",
         "Neck",
         aim_axis=_UP,
-        size=(2.0, 1.0, 1.0),
-        rest_offset=(0.0, 1.3, 0.0),
+        size=(1.15, 1.18, 1.13),
+        rest_offset=(0.0, 1.16, -0.067),
     ),
     # --- left arm -------------------------------------------------------
+    # The mannequin is modelled in an A-pose while the rig rests with arms
+    # down, so the shoulder joint is recovered from the A-posed centre and the
+    # arm re-hung vertically. Bone lengths are the A-pose centre spacings,
+    # which the rotation leaves unchanged.
     Part(
         "LeftUpperArm",
         "UpperTorso",
         "LeftShoulder",
         aim_axis=_DOWN,
-        size=(1.0, 1.21, 1.0),
-        rest_offset=(-1.5, 0.4, 0.0),
+        size=(0.75, 0.89, 0.58),
+        rest_offset=(-0.678, -0.146, 0.0),
     ),
     Part(
         "LeftLowerArm",
         "LeftUpperArm",
         "LeftElbow",
         aim_axis=_DOWN,
-        size=(1.0, 1.16, 1.0),
-        rest_offset=(0.0, -1.19, 0.0),
+        size=(0.66, 0.90, 0.59),
+        rest_offset=(0.0, -0.680, 0.0),
     ),
     Part(
         "LeftHand",
@@ -69,8 +86,8 @@ PARTS: tuple[Part, ...] = (
         "LeftWrist",
         aim_axis=_DOWN,
         roll_axis=_BACK,
-        size=(1.0, 0.62, 1.0),
-        rest_offset=(0.0, -0.89, 0.0),
+        size=(0.55, 0.59, 0.53),
+        rest_offset=(0.0, -0.694, 0.0),
     ),
     # --- right arm ------------------------------------------------------
     Part(
@@ -78,16 +95,16 @@ PARTS: tuple[Part, ...] = (
         "UpperTorso",
         "RightShoulder",
         aim_axis=_DOWN,
-        size=(1.0, 1.21, 1.0),
-        rest_offset=(1.5, 0.4, 0.0),
+        size=(0.75, 0.89, 0.58),
+        rest_offset=(0.678, -0.146, 0.0),
     ),
     Part(
         "RightLowerArm",
         "RightUpperArm",
         "RightElbow",
         aim_axis=_DOWN,
-        size=(1.0, 1.16, 1.0),
-        rest_offset=(0.0, -1.19, 0.0),
+        size=(0.66, 0.90, 0.59),
+        rest_offset=(0.0, -0.680, 0.0),
     ),
     Part(
         "RightHand",
@@ -95,25 +112,28 @@ PARTS: tuple[Part, ...] = (
         "RightWrist",
         aim_axis=_DOWN,
         roll_axis=_BACK,
-        size=(1.0, 0.62, 1.0),
-        rest_offset=(0.0, -0.89, 0.0),
+        size=(0.55, 0.59, 0.53),
+        rest_offset=(0.0, -0.694, 0.0),
     ),
     # --- left leg -------------------------------------------------------
+    # Legs are modelled vertical, so these offsets are the measurements
+    # unchanged, only mirrored: the mannequin's left is +X, a Roblox
+    # character's own left is -X.
     Part(
         "LeftUpperLeg",
         "LowerTorso",
         "LeftHip",
         aim_axis=_DOWN,
-        size=(1.0, 1.55, 1.0),
-        rest_offset=(-0.5, -0.98, 0.0),
+        size=(0.66, 1.66, 0.66),
+        rest_offset=(-0.328, -0.831, 0.011),
     ),
     Part(
         "LeftLowerLeg",
         "LeftUpperLeg",
         "LeftKnee",
         aim_axis=_DOWN,
-        size=(1.0, 1.51, 1.0),
-        rest_offset=(0.0, -1.53, 0.0),
+        size=(0.61, 1.17, 0.61),
+        rest_offset=(-0.025, -0.903, -0.021),
     ),
     Part(
         "LeftFoot",
@@ -121,8 +141,8 @@ PARTS: tuple[Part, ...] = (
         "LeftAnkle",
         aim_axis=_FORWARD,
         roll_axis=_UP,
-        size=(1.0, 0.94, 1.0),
-        rest_offset=(0.0, -1.22, 0.0),
+        size=(0.61, 0.56, 0.86),
+        rest_offset=(0.0, -0.421, -0.112),
     ),
     # --- right leg ------------------------------------------------------
     Part(
@@ -130,16 +150,16 @@ PARTS: tuple[Part, ...] = (
         "LowerTorso",
         "RightHip",
         aim_axis=_DOWN,
-        size=(1.0, 1.55, 1.0),
-        rest_offset=(0.5, -0.98, 0.0),
+        size=(0.66, 1.66, 0.66),
+        rest_offset=(0.328, -0.831, 0.011),
     ),
     Part(
         "RightLowerLeg",
         "RightUpperLeg",
         "RightKnee",
         aim_axis=_DOWN,
-        size=(1.0, 1.51, 1.0),
-        rest_offset=(0.0, -1.53, 0.0),
+        size=(0.61, 1.17, 0.61),
+        rest_offset=(0.025, -0.903, -0.021),
     ),
     Part(
         "RightFoot",
@@ -147,8 +167,8 @@ PARTS: tuple[Part, ...] = (
         "RightAnkle",
         aim_axis=_FORWARD,
         roll_axis=_UP,
-        size=(1.0, 0.94, 1.0),
-        rest_offset=(0.0, -1.22, 0.0),
+        size=(0.61, 0.56, 0.86),
+        rest_offset=(0.0, -0.421, -0.112),
     ),
 )
 

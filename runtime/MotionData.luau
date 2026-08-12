@@ -26,15 +26,15 @@ export type Gait = {
 MotionData.gaits = {} :: { [string]: Gait }
 
 MotionData.gaits["run"] = {
-	stride = 11.8756,
-	speed = 19.001,
+	stride = 7.3525,
+	speed = 11.7639,
 	rate = 1.6,
 	steps = 2,
 }
 
 MotionData.gaits["walk"] = {
-	stride = 7.7733,
-	speed = 6.9959,
+	stride = 4.7306,
+	speed = 4.2576,
 	rate = 0.9,
 	steps = 2,
 }

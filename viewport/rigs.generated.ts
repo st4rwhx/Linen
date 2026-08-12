@@ -42,18 +42,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "HumanoidRootPart",
       "joint": "Root",
       "size": [
-        2.0,
-        0.4,
-        1.0
+        1.33,
+        0.41,
+        0.72
       ],
       "pivot": [
         0.0,
-        -0.2,
+        -0.205,
         0.0
       ],
       "offsetFromPivot": [
         0.0,
-        0.2,
+        0.205,
         0.0
       ]
     },
@@ -62,18 +62,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "LowerTorso",
       "joint": "Waist",
       "size": [
-        2.0,
-        1.6,
-        1.0
+        1.3,
+        1.7,
+        0.84
       ],
       "pivot": [
         0.0,
-        0.19999999999999996,
-        0.0
+        -0.05599999999999994,
+        0.051
       ],
       "offsetFromPivot": [
         0.0,
-        0.8,
+        0.85,
         0.0
       ]
     },
@@ -82,18 +82,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "UpperTorso",
       "joint": "Neck",
       "size": [
-        2.0,
-        1.0,
-        1.0
+        1.15,
+        1.18,
+        1.13
       ],
       "pivot": [
         0.0,
-        0.8,
-        0.0
+        0.57,
+        -0.067
       ],
       "offsetFromPivot": [
         0.0,
-        0.5,
+        0.59,
         0.0
       ]
     },
@@ -102,18 +102,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "UpperTorso",
       "joint": "LeftShoulder",
       "size": [
-        1.0,
-        1.21,
-        1.0
+        0.75,
+        0.89,
+        0.58
       ],
       "pivot": [
-        -1.5,
-        1.005,
+        -0.678,
+        0.29900000000000004,
         0.0
       ],
       "offsetFromPivot": [
         0.0,
-        -0.6049999999999999,
+        -0.44500000000000006,
         0.0
       ]
     },
@@ -122,18 +122,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "LeftUpperArm",
       "joint": "LeftElbow",
       "size": [
-        1.0,
-        1.16,
-        1.0
+        0.66,
+        0.9,
+        0.59
       ],
       "pivot": [
         0.0,
-        -0.61,
+        -0.23000000000000004,
         0.0
       ],
       "offsetFromPivot": [
         0.0,
-        -0.58,
+        -0.45,
         0.0
       ]
     },
@@ -142,18 +142,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "LeftLowerArm",
       "joint": "LeftWrist",
       "size": [
-        1.0,
-        0.62,
-        1.0
+        0.55,
+        0.59,
+        0.53
       ],
       "pivot": [
         0.0,
-        -0.5800000000000001,
+        -0.39899999999999997,
         0.0
       ],
       "offsetFromPivot": [
         0.0,
-        -0.30999999999999994,
+        -0.295,
         0.0
       ]
     },
@@ -162,18 +162,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "UpperTorso",
       "joint": "RightShoulder",
       "size": [
-        1.0,
-        1.21,
-        1.0
+        0.75,
+        0.89,
+        0.58
       ],
       "pivot": [
-        1.5,
-        1.005,
+        0.678,
+        0.29900000000000004,
         0.0
       ],
       "offsetFromPivot": [
         0.0,
-        -0.6049999999999999,
+        -0.44500000000000006,
         0.0
       ]
     },
@@ -182,18 +182,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "RightUpperArm",
       "joint": "RightElbow",
       "size": [
-        1.0,
-        1.16,
-        1.0
+        0.66,
+        0.9,
+        0.59
       ],
       "pivot": [
         0.0,
-        -0.61,
+        -0.23000000000000004,
         0.0
       ],
       "offsetFromPivot": [
         0.0,
-        -0.58,
+        -0.45,
         0.0
       ]
     },
@@ -202,18 +202,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "RightLowerArm",
       "joint": "RightWrist",
       "size": [
-        1.0,
-        0.62,
-        1.0
+        0.55,
+        0.59,
+        0.53
       ],
       "pivot": [
         0.0,
-        -0.5800000000000001,
+        -0.39899999999999997,
         0.0
       ],
       "offsetFromPivot": [
         0.0,
-        -0.30999999999999994,
+        -0.295,
         0.0
       ]
     },
@@ -222,18 +222,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "LowerTorso",
       "joint": "LeftHip",
       "size": [
-        1.0,
-        1.55,
-        1.0
+        0.66,
+        1.66,
+        0.66
       ],
       "pivot": [
-        -0.5,
-        -0.20499999999999996,
-        0.0
+        -0.328,
+        -0.0010000000000000009,
+        0.011
       ],
       "offsetFromPivot": [
         0.0,
-        -0.775,
+        -0.83,
         0.0
       ]
     },
@@ -242,18 +242,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "LeftUpperLeg",
       "joint": "LeftKnee",
       "size": [
-        1.0,
-        1.51,
-        1.0
+        0.61,
+        1.17,
+        0.61
       ],
       "pivot": [
-        0.0,
-        -0.775,
-        0.0
+        -0.025,
+        -0.31800000000000006,
+        -0.021
       ],
       "offsetFromPivot": [
         0.0,
-        -0.755,
+        -0.585,
         0.0
       ]
     },
@@ -262,19 +262,19 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "LeftLowerLeg",
       "joint": "LeftAnkle",
       "size": [
-        1.0,
-        0.94,
-        1.0
+        0.61,
+        0.56,
+        0.86
       ],
       "pivot": [
         0.0,
-        -1.22,
-        0.5
+        -0.421,
+        0.318
       ],
       "offsetFromPivot": [
         0.0,
         0.0,
-        -0.5
+        -0.43
       ]
     },
     {
@@ -282,18 +282,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "LowerTorso",
       "joint": "RightHip",
       "size": [
-        1.0,
-        1.55,
-        1.0
+        0.66,
+        1.66,
+        0.66
       ],
       "pivot": [
-        0.5,
-        -0.20499999999999996,
-        0.0
+        0.328,
+        -0.0010000000000000009,
+        0.011
       ],
       "offsetFromPivot": [
         0.0,
-        -0.775,
+        -0.83,
         0.0
       ]
     },
@@ -302,18 +302,18 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "RightUpperLeg",
       "joint": "RightKnee",
       "size": [
-        1.0,
-        1.51,
-        1.0
+        0.61,
+        1.17,
+        0.61
       ],
       "pivot": [
-        0.0,
-        -0.775,
-        0.0
+        0.025,
+        -0.31800000000000006,
+        -0.021
       ],
       "offsetFromPivot": [
         0.0,
-        -0.755,
+        -0.585,
         0.0
       ]
     },
@@ -322,19 +322,19 @@ export const RIGS: Record<string, RigDefinition> = {
       "parent": "RightLowerLeg",
       "joint": "RightAnkle",
       "size": [
-        1.0,
-        0.94,
-        1.0
+        0.61,
+        0.56,
+        0.86
       ],
       "pivot": [
         0.0,
-        -1.22,
-        0.5
+        -0.421,
+        0.318
       ],
       "offsetFromPivot": [
         0.0,
         0.0,
-        -0.5
+        -0.43
       ]
     }
   ]

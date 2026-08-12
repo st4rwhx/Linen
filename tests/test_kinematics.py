@@ -10,16 +10,36 @@ from linen.rigs.kinematics import forward_kinematics, sole_positions, step_lengt
 
 
 # --- forward kinematics ----------------------------------------------------
+#: Measured from Roblox's own ClassicMannequin.fbx with
+#: tools/read_fbx_skeleton.py. The rig is built from these, so they are the
+#: check that it still matches its source.
+MANNEQUIN_HEIGHT = 4.977
+MANNEQUIN_ROOT_TO_SOLE = 2.433
+
+
 def test_the_rest_pose_stacks_the_parts_where_the_offsets_say():
     placed = forward_kinematics(R15, {})
     root, _ = placed["HumanoidRootPart"]
     assert np.allclose(root, 0.0)
 
-    # UpperTorso sits one stud above LowerTorso, which sits at the root.
-    assert placed["UpperTorso"][0][1] == pytest.approx(1.0)
-    # The head is above the chest, the feet below the hips.
-    assert placed["Head"][0][1] > placed["UpperTorso"][0][1]
-    assert placed["LeftFoot"][0][1] < placed["LeftUpperLeg"][0][1]
+    assert placed["Head"][0][1] > placed["UpperTorso"][0][1] > placed["LowerTorso"][0][1]
+    assert placed["LeftFoot"][0][1] < placed["LeftLowerLeg"][0][1] < placed["LeftUpperLeg"][0][1]
+    assert placed["LeftHand"][0][1] < placed["LeftLowerArm"][0][1] < placed["LeftUpperArm"][0][1]
+
+
+def test_the_rig_still_matches_the_mannequin_it_was_measured_from():
+    """Guards the number every other measurement hangs off.
+
+    The rig's proportions were wrong twice — once by a factor of two — and
+    neither time did any test notice, because nothing compared them to anything
+    outside the file. This does.
+    """
+    placed = forward_kinematics(R15, {})
+    top = placed["Head"][0][1] + R15.part("Head").size[1] / 2
+    sole = placed["LeftFoot"][0][1] - R15.part("LeftFoot").size[1] / 2
+
+    assert top - sole == pytest.approx(MANNEQUIN_HEIGHT, abs=0.02)
+    assert -sole == pytest.approx(MANNEQUIN_ROOT_TO_SOLE, abs=0.02)
 
 
 def test_the_rest_pose_is_left_right_symmetric():
@@ -48,8 +68,12 @@ def test_a_joint_rotates_about_its_pivot_not_its_centre():
         [0.0, R15.part("LeftLowerLeg").size[1] / 2.0, 0.0]
     )
     assert np.allclose(knee_bent, knee_rest, atol=1e-6)
-    # And the foot has swung backwards, not stayed put.
-    assert bent["LeftFoot"][0][2] > rest["LeftFoot"][0][2] + 1.0
+    # And the foot has swung backwards by about the length of the shin, rather
+    # than staying put. Expressed against the rig's own geometry so it keeps
+    # meaning the same thing if the proportions are corrected again.
+    shin = R15.part("LeftLowerLeg").size[1]
+    swing = bent["LeftFoot"][0][2] - rest["LeftFoot"][0][2]
+    assert swing > shin * 0.8, f"foot only moved {swing:.2f} for a {shin} shin"
 
 
 def test_raising_an_arm_forward_moves_the_hand_forward():
@@ -97,13 +121,40 @@ def test_only_gaits_appear_among_the_locomotion_strides():
     assert set(locomotion_strides()) == {"walk", "run"}
 
 
-def test_strides_land_in_a_plausible_range_for_roblox():
-    # Roblox's default WalkSpeed is 16 studs/s. A walk that naturally covered
-    # that much would leave no reason to ever blend to a run, and one that
-    # covered a fraction of it would be played at a comical rate.
+CHARACTER_HEIGHT_STUDS = 5.0
+ROBLOX_DEFAULT_WALKSPEED = 16.0
+
+
+def test_gait_speeds_are_plausible_for_a_body_of_this_size():
+    """Judged in body-heights per second, which is scale-free.
+
+    A person walks at roughly 0.7-0.9 of their own height per second and runs at
+    two to three. Measuring against Roblox's default WalkSpeed instead — the
+    obvious thing to do — encodes that default as correct, and it is not.
+    """
     strides = locomotion_strides()
-    assert 4.0 < strides["walk"].speed < 12.0
-    assert strides["walk"].speed < 16.0 < strides["run"].speed * 1.4
+    walk = strides["walk"].speed / CHARACTER_HEIGHT_STUDS
+    run = strides["run"].speed / CHARACTER_HEIGHT_STUDS
+
+    assert 0.55 < walk < 1.1, f"{walk:.2f} body-heights/s is not a walk"
+    assert 1.5 < run < 3.2, f"{run:.2f} body-heights/s is not a run"
+    assert run > walk * 2
+
+
+def test_roblox_default_walkspeed_is_a_sprint_for_a_character_this_size():
+    """Worth asserting, because it decides what the runtime should blend to.
+
+    16 studs/s on a five-stud character is 3.2 body-heights per second, which is
+    sprinting, not walking. So at Roblox's default the blend should sit on the
+    run cycle — and the walk cycle only becomes usable once a game lowers
+    WalkSpeed, which is the honest reading rather than stretching the walk to
+    cover a speed no one walks at.
+    """
+    strides = locomotion_strides()
+    assert ROBLOX_DEFAULT_WALKSPEED / CHARACTER_HEIGHT_STUDS > 3.0
+    # The run must still reach it within the playback clamp the runtime applies.
+    assert ROBLOX_DEFAULT_WALKSPEED / strides["run"].speed <= 2.2
+    assert ROBLOX_DEFAULT_WALKSPEED / strides["walk"].speed > 2.2
 
 
 def test_stride_follows_the_poses_rather_than_being_declared():
