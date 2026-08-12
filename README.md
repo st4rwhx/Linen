@@ -369,6 +369,37 @@ mouvement de tête (cycles `talk`, `nod`, `shake_head`). La vraie animation
 faciale Roblox passe par les *dynamic heads* et `FaceControls` (50 poses FACS),
 qui sont un rig entièrement séparé — non couvert.
 
+## Le runtime : mouvement organique en jeu (style Euphoria)
+
+Tout ce qui précède est **hors-ligne** — du Python qui écrit des fichiers.
+[`runtime/`](runtime/) est autre chose : du **Luau qui s'embarque dans ta place**
+et modifie les personnages pendant qu'ils bougent.
+
+| Module | Ce qu'il fait |
+| --- | --- |
+| [`Ragdoll`](runtime/Ragdoll.luau) | Ragdoll **actif** : le corps continue d'essayer de tenir sa pose pendant que la physique agit dessus. Coudes et genoux en `HingeConstraint`, pas en cône |
+| [`FootPlanting`](runtime/FootPlanting.luau) | Pieds ancrés sur le relief via `IKControl` natif, bassin abaissé avant résolution |
+| [`Balance`](runtime/Balance.luau) | Centre de masse projeté dans le polygone de sustentation, marge en studs |
+| [`Momentum`](runtime/Momentum.luau) | Le buste s'incline contre l'accélération, lu sur la vélocité réelle |
+
+Les limites articulaires sont définies et testées **en Python**, puis générées
+en Luau — le rig physique ne peut pas diverger du rig d'animation. Un test
+vérifie qu'aucune pose de la banque ne demande quelque chose que les contraintes
+interdisent (il a attrapé un salut qui pliait le coude latéralement).
+
+**Objectif réaliste, dit franchement :** tu passes très largement au-dessus du
+Roblox standard. Tu n'auras pas la parité RDR2 — R15 a quinze blocs et **une
+seule articulation de colonne**, là où Euphoria en anime plusieurs, et aucun
+solveur ne crée des os manquants. Le vrai mur d'ingénierie n'est d'ailleurs pas
+là : c'est la **propriété réseau** en multijoueur, un problème qu'Euphoria n'a
+jamais eu puisque RDR2 est solo.
+
+Le détail complet — ce qui est fait, ce qui est possible, ce qui ne l'est pas et
+pourquoi — est dans [`docs/EUPHORIA.md`](docs/EUPHORIA.md).
+
+> Les modules Luau sont **écrits et relus, pas exécutés** : je n'ai pas de
+> moteur Roblox ici. Prévois une passe de mise au point en Studio.
+
 ## Importer dans Roblox
 
 La sortie est un `KeyframeSequence` en `.rbxmx`.

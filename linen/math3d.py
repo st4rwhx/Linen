@@ -238,6 +238,55 @@ def quat_slerp(a: np.ndarray, b: np.ndarray, t: float | np.ndarray) -> np.ndarra
     return normalize(np.where(close, lerped, slerped))
 
 
+def swing_twist(q: np.ndarray, axis: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Split rotations into swing and twist about ``axis``, in radians.
+
+    A joint limit is not one number: a shoulder tilts within a cone *and*
+    rotates about the bone's own length, and those are bounded separately. This
+    is the decomposition that lets a pose be checked against both — and the same
+    one a BallSocketConstraint applies, with its UpperAngle bounding the swing
+    and its twist limits the rest.
+
+    Returns ``(swing_angle, twist_angle)``. The twist is signed about ``axis``;
+    the swing is unsigned, being the size of a tilt in some direction.
+    """
+    q = normalize(np.atleast_2d(np.asarray(q, dtype=float)))
+    a = normalize(np.asarray(axis, dtype=float).reshape(3))
+
+    projection = np.sum(q[..., :3] * a, axis=-1, keepdims=True) * a
+    twist = normalize(np.concatenate([projection, q[..., 3:]], axis=-1))
+    # A rotation exactly 180 degrees off-axis leaves nothing to project; the
+    # twist is undefined there, so call it zero rather than propagate a NaN.
+    degenerate = np.linalg.norm(twist[..., :3], axis=-1) + np.abs(twist[..., 3]) < 1e-8
+    twist = np.where(degenerate[..., None], np.array([0.0, 0.0, 0.0, 1.0]), twist)
+
+    swing = quat_multiply(q, quat_conjugate(twist))
+
+    twist_angle = 2.0 * np.arctan2(
+        np.sum(twist[..., :3] * a, axis=-1), twist[..., 3]
+    )
+    twist_angle = (twist_angle + np.pi) % (2.0 * np.pi) - np.pi
+    swing_angle = 2.0 * np.arccos(np.abs(swing[..., 3]).clip(0.0, 1.0))
+    return swing_angle, twist_angle
+
+
+def quat_conjugate(q: np.ndarray) -> np.ndarray:
+    q = np.asarray(q, dtype=float)
+    return np.concatenate([-q[..., :3], q[..., 3:]], axis=-1)
+
+
+def quat_multiply(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Hamilton product of xyzw quaternions, ``a`` applied after ``b``."""
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    av, aw = a[..., :3], a[..., 3:]
+    bv, bw = b[..., :3], b[..., 3:]
+    return np.concatenate(
+        [aw * bv + bw * av + np.cross(av, bv), aw * bw - np.sum(av * bv, axis=-1, keepdims=True)],
+        axis=-1,
+    )
+
+
 def quat_angle(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Absolute angle in radians between two orientations."""
     dot = np.abs(np.sum(normalize(a) * normalize(b), axis=-1)).clip(0.0, 1.0)

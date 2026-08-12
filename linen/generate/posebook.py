@@ -143,16 +143,19 @@ SIT: PoseData = {
     "RightLowerArm": (20.0, 0.0, 0.0),
 }
 
+# The wave lives in elbow *flexion* plus forearm twist, not in bending the
+# forearm sideways — an elbow is a hinge, and a pose that ignores that reads
+# fine under an Animator and snaps the moment the ragdoll takes over.
 _WAVE_LEFT_UP: PoseData = {
-    "LeftUpperArm": (0.0, 0.0, -145.0),
-    "LeftLowerArm": (0.0, -30.0, -35.0),
-    "LeftHand": (0.0, 0.0, -15.0),
+    "LeftUpperArm": (0.0, 0.0, -150.0),
+    "LeftLowerArm": (55.0, -15.0, 0.0),
+    "LeftHand": (0.0, 0.0, -12.0),
     "UpperTorso": (0.0, -6.0, 0.0),
 }
 _WAVE_LEFT_OUT: PoseData = {
     "LeftUpperArm": (0.0, 0.0, -150.0),
-    "LeftLowerArm": (0.0, -30.0, 20.0),
-    "LeftHand": (0.0, 0.0, 15.0),
+    "LeftLowerArm": (100.0, 15.0, 0.0),
+    "LeftHand": (0.0, 0.0, 12.0),
     "UpperTorso": (0.0, -6.0, 0.0),
 }
 
