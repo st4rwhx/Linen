@@ -77,6 +77,42 @@ def _add_common_output(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="also write a dense JSON clip for the viewport component",
     )
+    parser.add_argument(
+        "--motion",
+        default="in-place",
+        choices=("in-place", "natural", "loop"),
+        help=(
+            "in-place: root locked, the Humanoid keeps driving position "
+            "(default); natural: bake root translation, for cutscenes; "
+            "loop: root locked with a seamless seam. Root translation only "
+            "exists on captured or imported clips."
+        ),
+    )
+
+
+def _add_duration(parser: argparse.ArgumentParser) -> None:
+    """Duration controls, for the commands that compose rather than record."""
+    from .generate.timing import DURATION_PRESETS, STRATEGIES
+
+    presets = ", ".join(f"{p:g}" for p in DURATION_PRESETS if p is not None)
+    parser.add_argument(
+        "--duration",
+        default="auto",
+        help=(
+            f"target length in seconds — any value, no cap. 'auto' keeps the "
+            f"sequence's natural length. Common choices: {presets}"
+        ),
+    )
+    parser.add_argument(
+        "--fit",
+        default="auto",
+        choices=STRATEGIES,
+        help=(
+            "how to reach --duration. auto: lengthen cycles if the plan has "
+            "any, else replay the sequence, else scale. cycle/repeat/stretch/"
+            "trim force one of those."
+        ),
+    )
 
 
 def _add_retarget(sub) -> None:
@@ -91,12 +127,6 @@ def _add_retarget(sub) -> None:
         help="source coordinate convention (default: z_up, what FreeMoCap writes)",
     )
     parser.add_argument("--name", default=None, help="animation name (default: file stem)")
-    parser.add_argument("--loop", action="store_true")
-    parser.add_argument(
-        "--root-motion",
-        action="store_true",
-        help="bake HumanoidRootPart translation; off by default so the Humanoid stays in control",
-    )
     parser.add_argument("--smoothing", type=int, default=5, help="smoothing window in frames")
     _add_common_output(parser)
 
@@ -117,8 +147,6 @@ def _add_bvh(sub) -> None:
         "--fps", type=float, default=None, help="override the file's frame time"
     )
     parser.add_argument("--name", default=None)
-    parser.add_argument("--loop", action="store_true")
-    parser.add_argument("--root-motion", action="store_true")
     parser.add_argument("--smoothing", type=int, default=3)
     _add_common_output(parser)
 
@@ -128,6 +156,7 @@ def _add_prompt(sub) -> None:
     parser.add_argument("text", help="what the animation should do")
     parser.add_argument("--fps", type=float, default=30.0)
     parser.add_argument("--seed", type=int, default=0)
+    _add_duration(parser)
     parser.add_argument(
         "--planner",
         default="auto",
@@ -153,6 +182,7 @@ def _add_synth(sub) -> None:
     parser = sub.add_parser("synth", help="motion plan JSON -> Roblox animation, no network")
     parser.add_argument("plan", type=Path, help="a motion plan written by hand or by `prompt`")
     parser.add_argument("--seed", type=int, default=0)
+    _add_duration(parser)
     _add_common_output(parser)
 
 
@@ -167,12 +197,15 @@ def _target_rigs(args) -> list:
 def _solve_all(args, track, name: str) -> list:
     from .retarget import SolveOptions, solve_clip
 
-    options = SolveOptions(root_motion=args.root_motion, smoothing_frames=args.smoothing)
+    options = SolveOptions(
+        root_motion=args.motion == "natural", smoothing_frames=args.smoothing
+    )
+    loop = args.motion == "loop"
     clips = []
     for rig in _target_rigs(args):
         clip = solve_clip(rig, track, options, name=name)
-        clip.loop = args.loop
-        clips.append(clip.with_loop_seam() if args.loop else clip)
+        clip.loop = loop
+        clips.append(clip.with_loop_seam() if loop else clip)
     return clips
 
 
@@ -226,7 +259,27 @@ def _cmd_synth(args) -> int:
 
 
 def _synthesize_all(plan: MotionPlan, args) -> list:
+    from .generate.timing import fit_duration
+
+    plan = fit_duration(plan, _duration(args.duration), strategy=args.fit)
+    if args.motion == "loop":
+        plan.loop = True
+
+    natural = f"{plan.duration:.2f}s"
+    if args.duration != "auto":
+        print(f"  fitted to {natural}: {plan.notes.rsplit('Fitted', 1)[-1].strip()}")
     return [synthesize(plan, rig, seed=args.seed) for rig in _target_rigs(args)]
+
+
+def _duration(value: str) -> float | None:
+    if value.strip().lower() in ("auto", "natural", ""):
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        raise ValueError(
+            f"--duration expects seconds or 'auto', got {value!r}"
+        ) from None
 
 
 def _cmd_providers(_args) -> int:

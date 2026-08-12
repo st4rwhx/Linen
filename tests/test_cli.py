@@ -90,6 +90,46 @@ def test_bvh_with_an_unknown_skeleton_lists_the_known_ones(tmp_path, capsys):
     assert "unknown skeleton" in capsys.readouterr().err
 
 
+def test_duration_has_no_ten_second_ceiling(monkeypatch, tmp_path, capsys):
+    _no_models(monkeypatch)
+    out = tmp_path / "long.rbxmx"
+    assert main(
+        ["prompt", "marche", "--planner", "offline", "--duration", "45", "-o", str(out)]
+    ) == 0
+    assert "45.00s" in capsys.readouterr().out
+
+
+def test_duration_auto_keeps_the_natural_length(monkeypatch, tmp_path, capsys):
+    _no_models(monkeypatch)
+    main(["prompt", "marche", "--planner", "offline", "-o", str(tmp_path / "a.rbxmx")])
+    assert "fitted to" not in capsys.readouterr().out
+
+
+def test_a_nonsense_duration_is_rejected(monkeypatch, tmp_path, capsys):
+    _no_models(monkeypatch)
+    assert main(
+        ["prompt", "marche", "--planner", "offline", "--duration", "bientot", "-o", str(tmp_path / "x.rbxmx")]
+    ) == 1
+    assert "expects seconds or 'auto'" in capsys.readouterr().err
+
+
+def test_motion_loop_marks_the_clip_as_looping(monkeypatch, tmp_path):
+    _no_models(monkeypatch)
+    out = tmp_path / "loop.rbxmx"
+    main(
+        ["prompt", "marche", "--planner", "offline", "--motion", "loop", "--duration", "6", "-o", str(out)]
+    )
+    assert '<bool name="Loop">true</bool>' in out.read_text()
+
+
+def test_motion_natural_bakes_root_translation_on_a_capture(tmp_path, recording):
+    out = tmp_path / "moved.rbxmx"
+    assert main(
+        ["retarget", str(recording), "--fps", "30", "--motion", "natural", "-o", str(out)]
+    ) == 0
+    assert out.exists()
+
+
 def test_synth_needs_no_network(tmp_path):
     plan = tmp_path / "plan.json"
     plan.write_text(json.dumps(PLAN))

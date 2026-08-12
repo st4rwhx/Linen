@@ -169,6 +169,36 @@ Trois invariants sont testés parce qu'ils cassent silencieusement :
 Quand rien n'est reconnu, il produit un idle **et l'écrit dans `notes`**, avec
 la liste de ce qu'il sait faire. Un repli silencieux passerait pour un bug.
 
+## Ajuster la durée
+
+[`timing.py`](../linen/generate/timing.py) rallonge ou raccourcit un plan. Il
+opère sur un `MotionPlan`, donc il sert autant les plans du LLM que ceux du
+planificateur hors-ligne.
+
+Il n'y a pas de plafond à 10 s ici, parce qu'il n'y a pas de fenêtre
+d'entraînement : un plan est une mise en page, pas un échantillon tiré d'un
+modèle. La seule borne est un garde-fou anti-faute de frappe à 600 s.
+
+La vraie question n'est donc pas *si* on peut allonger mais **comment**, et le
+défaut lit le plan pour le décider :
+
+- un plan contenant un cycle voit ses **cycles s'allonger à cadence constante**
+  — une minute de marche, pas un pas d'une minute ;
+- un plan sans cycle **rejoue sa séquence**, avec un fondu à chaque raccord (le
+  premier segment n'en a pas : rien ne le précède) ;
+- pour raccourcir, le timing est mis à l'échelle.
+
+`stretch` reste disponible quand le ralenti est voulu, mais refuse d'aller
+au-delà de la plage de cadence valide : étirer une marche d'un facteur 27
+donnerait un pas toutes les trente secondes. L'erreur nomme alors `--fit cycle`
+plutôt que de laisser le schéma se plaindre d'un `rate` hors bornes trois
+niveaux plus bas.
+
+Les presets et les stratégies sont **émis** dans
+`viewport/rigs.generated.ts` par le même module que la géométrie des rigs : un
+sélecteur de durée codé en dur dans le frontend finirait par proposer autre
+chose que ce que le planificateur accepte.
+
 ## Choisir le rig
 
 `--rig` accepte `R15`, `R6` ou `both` sur toutes les commandes. Le cas `both`

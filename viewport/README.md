@@ -9,8 +9,22 @@ de rendu.
 
 | Fichier | Rôle |
 | --- | --- |
-| `rigs.generated.ts` | Géométrie R15 / R6. **Généré** — ne pas éditer à la main. |
+| `rigs.generated.ts` | Géométrie R15 / R6 **et** les contrôles de génération. **Généré** — ne pas éditer à la main. |
 | `RobloxRig.tsx` | Le composant R3F. |
+
+Le module généré exporte aussi de quoi construire la barre de contrôles :
+
+```ts
+import { DURATION_PRESETS, FIT_STRATEGIES, MOTION_MODES } from "./rigs.generated";
+// DURATION_PRESETS -> [null, 3, 5, 10, 15, 30, 60]   (null = durée naturelle)
+// FIT_STRATEGIES   -> ["auto", "cycle", "repeat", "stretch", "trim"]
+// MOTION_MODES     -> in-place / natural / loop, avec libellé et explication
+```
+
+Ces valeurs viennent des mêmes constantes que le CLI. Un sélecteur de durée
+codé en dur dans le frontend finirait par proposer autre chose que ce que le
+planificateur accepte — et les presets ne sont que des suggestions : le champ
+accepte n'importe quelle valeur, il n'y a pas de plafond à 10 s.
 
 Régénérer la géométrie après toute modification des rigs Python :
 

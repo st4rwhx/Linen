@@ -90,9 +90,40 @@ def write_rig_module(path: str | Path) -> Path:
         "  parts: RigPart[];\n"
         "}\n\n"
         f"export const RIGS: Record<string, RigDefinition> = {{\n{body},\n}};\n\n"
-        "export type RigName = keyof typeof RIGS;\n"
+        "export type RigName = keyof typeof RIGS;\n\n" + _controls_module()
     )
     return path
+
+
+def _controls_module() -> str:
+    """The generation controls a UI needs to offer, kept in step with the CLI.
+
+    A duration picker hard-coded in the frontend would drift from what the
+    planner actually accepts, so the presets and fit strategies are emitted
+    from the same constants the command line reads.
+    """
+    from ..generate.timing import DURATION_PRESETS, STRATEGIES
+
+    presets = ", ".join(
+        "null" if value is None else f"{value:g}" for value in DURATION_PRESETS
+    )
+    return (
+        "/** Suggested durations in seconds; null means the plan's natural length.\n"
+        " *  Any other value is accepted too — there is no upper limit beyond a\n"
+        " *  typo guard, because plans are composed rather than sampled from a\n"
+        " *  model with a fixed training window. */\n"
+        f"export const DURATION_PRESETS: (number | null)[] = [{presets}];\n\n"
+        "/** How to reach a requested duration. */\n"
+        "export const FIT_STRATEGIES = "
+        + json.dumps(list(STRATEGIES))
+        + " as const;\n\n"
+        "/** Root handling, mirroring the CLI's --motion. */\n"
+        "export const MOTION_MODES = [\n"
+        '  { id: "in-place", label: "In-place", hint: "Root locked. Good for idle and run cycles." },\n'
+        '  { id: "natural", label: "Natural", hint: "Character moves through space." },\n'
+        '  { id: "loop", label: "Loop", hint: "Seamless in-place loop." },\n'
+        "] as const;\n"
+    )
 
 
 if __name__ == "__main__":

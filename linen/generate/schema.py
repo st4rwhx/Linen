@@ -29,7 +29,11 @@ EASINGS: tuple[str, ...] = (
 LAYER_KINDS: tuple[str, ...] = ("breathing", "sway", "head_turn", "noise")
 PRIORITIES: tuple[str, ...] = ("Idle", "Movement", "Action", "Action2", "Action3", "Action4")
 
-MAX_DURATION_SECONDS = 60.0
+#: Generous rather than tight. The hosted generators stop at ten seconds
+#: because that is as much as a motion diffusion model's training window held;
+#: composing from a pose vocabulary has no such window, so this exists only to
+#: catch a typo in a duration, not to ration anything.
+MAX_DURATION_SECONDS = 600.0
 
 
 class PlanError(ValueError):

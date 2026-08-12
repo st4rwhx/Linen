@@ -487,3 +487,19 @@ export const RIGS: Record<string, RigDefinition> = {
 };
 
 export type RigName = keyof typeof RIGS;
+
+/** Suggested durations in seconds; null means the plan's natural length.
+ *  Any other value is accepted too — there is no upper limit beyond a
+ *  typo guard, because plans are composed rather than sampled from a
+ *  model with a fixed training window. */
+export const DURATION_PRESETS: (number | null)[] = [null, 3, 5, 10, 15, 30, 60];
+
+/** How to reach a requested duration. */
+export const FIT_STRATEGIES = ["auto", "cycle", "repeat", "stretch", "trim"] as const;
+
+/** Root handling, mirroring the CLI's --motion. */
+export const MOTION_MODES = [
+  { id: "in-place", label: "In-place", hint: "Root locked. Good for idle and run cycles." },
+  { id: "natural", label: "Natural", hint: "Character moves through space." },
+  { id: "loop", label: "Loop", hint: "Seamless in-place loop." },
+] as const;

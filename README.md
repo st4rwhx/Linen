@@ -147,7 +147,7 @@ linen retarget recording/output_data/mediapipe_body_3d_xyz.npy \
 | --- | --- |
 | `--axes` | Convention de la capture : `z_up` (défaut, ce qu'écrit FreeMoCap), `y_up`, `mediapipe_world` |
 | `--units` | `mm` (défaut), `cm`, `m` |
-| `--root-motion` | Cuit la translation du `HumanoidRootPart`. Désactivé par défaut : sur un personnage vivant, c'est le `Humanoid` qui pilote la position, et une racine cuite se bat avec lui. À activer pour une cinématique. |
+| `--motion` | `in-place` (défaut), `natural` (racine cuite), `loop`. Voir plus bas. |
 | `--smoothing` | Fenêtre de lissage en frames (défaut 5) |
 | `--tolerance` | Réduction de keyframes, en degrés. `0` garde toutes les frames. |
 
@@ -201,6 +201,49 @@ mots** — et il le dit dans ses `notes` quand il ne reconnaît rien.
 | enchaînement | puis, ensuite, et, then, virgules |
 
 `linen vocabulary` liste tout, y compris les mots-clés exacts.
+
+#### Durée : n'importe laquelle, sans plafond
+
+```bash
+linen prompt "marche" --planner offline --duration 60 -o walk.rbxmx   # 60 s
+linen prompt "marche" --planner offline --duration 90 -o walk.rbxmx   # 90 s aussi
+```
+
+Les services hébergés s'arrêtent à 10 secondes parce qu'un modèle de diffusion
+ne peut produire que ce que sa fenêtre d'entraînement contenait. Ici la durée
+est un problème de **mise en page**, pas de modèle : un plan est un emploi du
+temps sur un vocabulaire de poses. Il n'y a donc pas de plafond — juste un
+garde-fou à 600 s contre les fautes de frappe.
+
+Ce qui compte alors, ce n'est pas *si* on peut allonger, c'est **comment**.
+Étirer un coup de poing de 2 s à 60 s donne un ralenti, pas un coup de poing
+plus long. `--fit` choisit :
+
+| `--fit` | Effet |
+| --- | --- |
+| `auto` (défaut) | Lit le plan : cycle présent → il tourne plus longtemps ; sinon la séquence rejoue ; sinon le timing est mis à l'échelle |
+| `cycle` | Le temps en plus va aux cycles, **à cadence inchangée** — 60 s de marche, pas un pas géant |
+| `repeat` | La séquence rejoue jusqu'à remplir, avec un fondu aux raccords |
+| `stretch` | Tout est mis à l'échelle. Ralenti assumé |
+| `trim` | Coupe net à la cible, ou tient la dernière pose |
+
+`--duration auto` (défaut) garde la longueur naturelle de la séquence.
+Valeurs suggérées pour une UI : 3, 5, 10, 15, 30, 60 — exportées dans
+`viewport/rigs.generated.ts` (`DURATION_PRESETS`) pour ne pas diverger du CLI.
+
+Pour une boucle, un clip **court** vaut mieux qu'un long : 2,2 s de marche en
+`--motion loop` rejouées par Roblox pèsent 200 ko là où 60 s en pèsent 5 Mo,
+pour un résultat identique à l'écran.
+
+#### Racine et boucle
+
+`--motion` sur toutes les commandes :
+
+| Valeur | Effet |
+| --- | --- |
+| `in-place` (défaut) | Racine verrouillée. C'est le `Humanoid` qui pilote la position — le bon choix pour un personnage jouable |
+| `natural` | Translation de la racine cuite dans le fichier. Pour une cinématique |
+| `loop` | Racine verrouillée + raccord de boucle sans à-coup |
 
 **Avec un LLM local** — plans plus variés, toujours zéro coût et zéro réseau
 sortant :
