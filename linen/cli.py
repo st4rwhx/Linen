@@ -80,6 +80,11 @@ def _add_common_output(parser: argparse.ArgumentParser) -> None:
         help="also write a dense JSON clip for the viewport component",
     )
     parser.add_argument(
+        "--no-viewer",
+        action="store_true",
+        help="skip the standalone .html 3D viewer written next to the .rbxmx",
+    )
+    parser.add_argument(
         "--motion",
         default="in-place",
         choices=("in-place", "natural", "loop"),
@@ -254,6 +259,11 @@ def _add_scene(sub) -> None:
     )
     parser.add_argument(
         "--preview", action="store_true", help="also write viewport JSON per actor"
+    )
+    parser.add_argument(
+        "--no-viewer",
+        action="store_true",
+        help="skip the standalone <Scene>.html 3D viewer",
     )
 
 
@@ -432,6 +442,16 @@ def _cmd_scene(args) -> int:
     blockout_path = args.out / f"{scene.name}_Blockout.rbxmx"
     blockout_path.write_text(blockout(set_plan))
     print(f"{blockout_path}: blockout du decor (placeholders gris, positions calculees)")
+
+    if not args.no_viewer:
+        from .export import scene_payload, write_viewer
+
+        viewer = write_viewer(
+            scene_payload(built, sheet=sheet, set_plan=set_plan),
+            args.out / f"{scene.name}.html",
+        )
+        print(f"{viewer}: visualiseur 3D — ouvre-le, c'est la scene entiere")
+
     print()
     print(set_plan.sheet())
 
@@ -496,6 +516,12 @@ def _write(clips: list[AnimationClip], args) -> int:
 
             preview = _suffixed(args.preview, clip.rig.name, len(clips) > 1)
             print(f"{write_preview(clip, preview)}: viewport clip")
+
+        if not args.no_viewer:
+            from .export import clip_payload, write_viewer
+
+            page = write_viewer(clip_payload(clip), out.with_suffix(".html"))
+            print(f"{page}: visualiseur 3D — ouvre-le avant d'importer quoi que ce soit")
 
     print("import into Studio with Animation Editor > ... > Import > From File")
     return 0

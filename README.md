@@ -299,10 +299,40 @@ C'est le mode de travail recommandé : le LLM propose, vous ajustez le timing
 dans le JSON, vous resynthétisez. `linen vocabulary` liste les poses et cycles
 disponibles.
 
-### Le viewport
+### Le visualiseur 3D
 
-Voir [`viewport/README.md`](viewport/README.md) : deux fichiers à déposer dans
-`freemocap-ui`, un `<RobloxRig rig="R15" clip={clip} />` dans la scène.
+Chaque commande écrit un `.html` à côté de son `.rbxmx`. **Double-clique-le** :
+il s'ouvre dans le navigateur et l'animation joue.
+
+Pas de serveur, pas de CDN, pas de compte — la page contient les données. Elle
+marche hors-ligne et s'envoie par mail.
+
+```bash
+linen prompt "coup de poing droite tres rapide" -o build/punch.rbxmx
+# build/punch.rbxmx  +  build/punch.html
+```
+
+| | |
+| --- | --- |
+| Tourner / zoomer / déplacer | glisser · molette · maj+glisser |
+| Lecture, image par image | <kbd>espace</kbd>, <kbd>←</kbd> <kbd>→</kbd> |
+| Vues fixes | **Face**, **Profil**, **Dessus** |
+| Aller à un instant | cliquer sur la timeline |
+| Ouvrir sur un moment précis | `punch.html#t=2.03&cam=side` |
+
+Sur une scène, la page porte en plus la **caméra du réalisateur** — elle joue la
+prise à travers tes plans, avec leur focale et leur dérive, donc un plan qui
+tombe sur la nuque de quelqu'un se voit ici et pas après un import — le décor
+calculé, les cues par acteur en couloirs, tous les événements en repères sous la
+barre, et la courbe de tension derrière.
+
+Regarde la prise avant d'importer quoi que ce soit. C'est la seule vérification
+qui coûte deux secondes et qui répond à la vraie question : *est-ce que ça
+ressemble à ce que j'ai demandé.*
+
+> Le composant React pour FreeMoCap est séparé, dans
+> [`viewport/README.md`](viewport/README.md) : deux fichiers à déposer dans
+> `freemocap-ui`, un `<RobloxRig rig="R15" clip={clip} />` dans la scène.
 
 ### Cinématiques multi-personnages
 

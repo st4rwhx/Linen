@@ -217,11 +217,18 @@ une session de débogage dans Studio.
 | Script Studio : mise en place + lecture synchrone | **Fait**, jamais exécuté |
 | Script Studio : caméra, props, VFX, visages, répliques | **Fait**, jamais exécuté |
 | Script Studio : bus audio, sons repérés, ambiance | **Fait**, jamais exécuté |
-| Visualiseur 3D interactif | **Pas encore** |
+| Visualiseur 3D interactif, avec caméra du réalisateur | **Fait**, et il tourne |
 | Décor généré | **Non, et ce n'est pas prévu** |
 
 Rien de ce qui touche à Studio n'a encore **tourné** une seule fois. C'est le
 risque numéro un du projet.
+
+Le visualiseur, lui, tourne : `<Scène>.html` s'ouvre dans un navigateur et joue
+la prise. Il ne remplace pas Studio — il n'a ni la physique, ni les vraies
+proportions d'avatar, ni les visages — mais il répond à la question que rien
+d'autre ici ne posait : *est-ce que ça ressemble à ce qu'on a demandé*. Il a
+déjà attrapé le plan `wall` de l'exemple, qui cadrait un mur gris et rien
+d'autre.
 
 Un cran a néanmoins été gagné : tout le Luau généré passe maintenant par le
 **compilateur Luau officiel** et par `luau-analyze` en mode strict. Les scripts

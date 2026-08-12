@@ -3,7 +3,7 @@
 Ce guide ne demande **aucune ligne de code** et aucune installation en dehors de
 Roblox Studio. Les animations sont déjà générées et livrées dans le dépôt.
 
-Compte 20 minutes pour les étapes 1 à 3. Fais-les **dans l'ordre** : chacune
+Compte 20 minutes pour les étapes 1 à 4. Fais-les **dans l'ordre** : chacune
 vérifie quelque chose que la suivante suppose acquis.
 
 ---
@@ -13,7 +13,8 @@ vérifie quelque chose que la suivante suppose acquis.
 Sur la page GitHub du dépôt, bouton vert **Code** → **Download ZIP**. Dézippe
 quelque part de simple, par exemple sur ton Bureau.
 
-Ce dont tu as besoin est dans `examples/starter/R15/` : sept fichiers `.rbxmx`.
+Ce dont tu as besoin est dans `examples/starter/R15/` : sept fichiers `.rbxmx`,
+et à côté de chacun un `.html` du même nom.
 
 | Fichier | Ce que c'est |
 | --- | --- |
@@ -27,7 +28,33 @@ Ce dont tu as besoin est dans `examples/starter/R15/` : sept fichiers `.rbxmx`.
 
 ---
 
-## Étape 1 — voir une animation jouer (5 min)
+## Étape 1 — les regarder, avant d'ouvrir quoi que ce soit (2 min)
+
+**Double-clique `examples/starter/R15/Walk.html`.** Il s'ouvre dans ton
+navigateur et le rig marche.
+
+Pas de serveur, pas d'installation, pas de compte : la page contient
+l'animation. Elle marche hors-ligne, tu peux l'envoyer à quelqu'un par mail.
+
+| Ce que tu peux faire | Comment |
+| --- | --- |
+| Tourner autour | glisser |
+| Zoomer | molette |
+| Déplacer | maj + glisser |
+| Lire / mettre en pause | <kbd>espace</kbd> |
+| Avancer d'une frame | <kbd>←</kbd> <kbd>→</kbd> |
+| Aller à un instant | cliquer sur la barre du bas |
+| Vues fixes | boutons **Face**, **Profil**, **Dessus** |
+
+Regarde `Walk` de **profil** au ralenti (vitesse 0,25×) : les bras doivent partir
+en opposition aux jambes, et le pied posé ne doit pas glisser.
+
+**Fais-le pour les sept.** C'est deux minutes, et c'est la seule étape qui te dit
+si un fichier vaut la peine d'être importé — avant d'en publier sept.
+
+---
+
+## Étape 2 — voir une animation jouer dans Studio (5 min)
 
 1. Ouvre Roblox Studio, crée une **Baseplate**.
 2. Onglet **Avatar** → **Rig Builder** → **R15** → **Block Rig**. Un mannequin
@@ -47,16 +74,19 @@ Le mannequin marche sur place. Les bras se balancent en opposition aux jambes.
 
 | Symptôme | Cause |
 | --- | --- |
-| L'import est grisé / refusé | Tu as construit un rig **R6**. Refais l'étape 2 en R15. |
+| L'import est grisé / refusé | Tu as construit un rig **R6**. Refais l'étape 2 en R15 avec **Block Rig R15**. |
 | Le perso ne bouge pas du tout | L'import a échoué silencieusement — vérifie que tu as bien pris un fichier dans `R15/`. |
 | Ça bouge mais c'est n'importe quoi | Note ce que tu vois et dis-le-moi. C'est exactement le retour qu'il me manque. |
 
 **C'est le point de contrôle le plus important du projet.** Tant que cette étape
 n'est pas passée, tout le reste est de la théorie. Ne va pas plus loin avant.
 
+Si le mannequin bouge autrement que dans `Walk.html`, c'est l'import qui a
+raté, pas l'animation : tu viens de la voir jouer correctement.
+
 ---
 
-## Étape 2 — publier les animations (10 min)
+## Étape 3 — publier les animations (10 min)
 
 Roblox ne peut pas jouer une animation depuis un fichier : il lui faut un
 identifiant. Il faut donc publier chaque fichier une fois.
@@ -87,7 +117,7 @@ Sit   = 1234567896
 
 ---
 
-## Étape 3 — les mettre sur ton personnage (5 min)
+## Étape 4 — les mettre sur ton personnage (5 min)
 
 Le personnage d'un joueur est animé par un script `Animate` que Roblox insère
 automatiquement. On en prend une copie et on remplace les identifiants. **Aucune
@@ -126,7 +156,7 @@ l'arrêt, marche et court avec tes cycles.
 
 ---
 
-## Étape 4 — le module qui change le plus (optionnel, 10 min)
+## Étape 5 — le module qui change le plus (optionnel, 10 min)
 
 `Secondary` fait traîner chaque articulation derrière son parent. C'est ce qui
 fait qu'une animation ordinaire se met à ressembler à du travail d'animateur.
