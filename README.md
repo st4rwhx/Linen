@@ -6,6 +6,10 @@ prompt texte, sans coût d'API.
 > **Tu débutes sur le projet ?** Commence par
 > **[`docs/DEMARRAGE.md`](docs/DEMARRAGE.md)** : sept animations déjà générées,
 > et un pas-à-pas dans Studio sans une ligne de code. 20 minutes.
+>
+> **Tu veux l'installer et t'en servir ?**
+> **[`docs/MODE_EMPLOI.md`](docs/MODE_EMPLOI.md)** : l'installation, chaque
+> commande, ce qu'elle fait vraiment, et où sont les limites.
 
 ```bash
 # un prompt -> une animation. Aucune clé, aucun GPU, aucun réseau.

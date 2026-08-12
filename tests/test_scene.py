@@ -496,3 +496,40 @@ def test_the_player_reports_what_is_missing_rather_than_half_playing():
     script = scene_script(built)
     assert "table.insert(missing" in script
     assert "est incomplète" in script
+
+
+# --- facial expressions ----------------------------------------------------
+def test_every_expression_blend_uses_a_pose_faceControls_actually_has():
+    """A misspelled FACS name does not error, it silently does nothing.
+
+    The runtime assigns each pose inside a pcall, so a head that supports the
+    expression perfectly well just comes out blank. Four blends were wrong this
+    way — NoseWrinkler for LeftNoseWrinkler, LipPressor for LipPresser,
+    LipStretcher for LeftLipStretcher, LipCornerDepressor for LipCornerDown.
+    """
+    from linen.scene.luau import FACS_POSES, _FACS
+
+    for expression, blend in _FACS.items():
+        unknown = set(blend) - FACS_POSES
+        assert not unknown, f"{expression} names poses that do not exist: {unknown}"
+
+
+def test_every_named_expression_has_a_blend_and_every_blend_is_named():
+    from linen.scene.events import EXPRESSIONS
+    from linen.scene.luau import _FACS
+
+    assert set(EXPRESSIONS) == set(_FACS)
+
+
+def test_expression_weights_are_inside_the_range_facs_accepts():
+    from linen.scene.luau import _FACS
+
+    for expression, blend in _FACS.items():
+        for pose, weight in blend.items():
+            assert 0.0 <= weight <= 1.0, f"{expression}.{pose} = {weight}"
+
+
+def test_neutral_clears_rather_than_poses():
+    from linen.scene.luau import _FACS
+
+    assert _FACS["neutral"] == {}, "neutral must reset, not add"

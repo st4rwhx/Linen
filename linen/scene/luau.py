@@ -171,18 +171,47 @@ def _audio_tables(sheet: SpottingSheet | None, mapping: dict[str, str]) -> list[
     return lines
 
 
-#: A small, deliberate subset of the 50 FACS poses — enough to read at Roblox
-#: camera distances, and named so a scene never mentions a coefficient.
+#: The 50 poses a ``FaceControls`` instance actually has.
+#:
+#: Kept here so the blends below can be checked against it. Every one of these
+#: is a property assignment guarded by ``pcall`` in the runtime — which means a
+#: misspelled name does not error, it simply does nothing, and the expression
+#: quietly comes out blank on a head that supports it perfectly well. Four of
+#: the blends below were wrong in exactly that way before this list existed.
+FACS_POSES: frozenset[str] = frozenset({
+    "LeftEyeClosed", "RightEyeClosed", "EyesLookDown", "EyesLookLeft",
+    "EyesLookRight", "EyesLookUp", "JawDrop", "JawLeft", "JawRight",
+    "Pucker", "FlatPucker", "Funneler", "LipsTogether", "LipPresser",
+    "LowerLipSuck", "UpperLipSuck", "MouthLeft", "MouthRight",
+    "ChinRaiser", "ChinRaiserUpperLip", "Corrugator",
+    "LeftLipCornerPuller", "RightLipCornerPuller",
+    "LeftLipCornerDown", "RightLipCornerDown",
+    "LeftLipStretcher", "RightLipStretcher",
+    "LeftLowerLipDepressor", "RightLowerLipDepressor",
+    "LeftUpperLipRaiser", "RightUpperLipRaiser",
+    "LeftCheekRaiser", "RightCheekRaiser",
+    "LeftCheekPuff", "RightCheekPuff",
+    "LeftDimpler", "RightDimpler",
+    "LeftInnerBrowRaiser", "RightInnerBrowRaiser",
+    "LeftOuterBrowRaiser", "RightOuterBrowRaiser",
+    "LeftBrowLowerer", "RightBrowLowerer",
+    "LeftNoseWrinkler", "RightNoseWrinkler",
+    "LeftEyeUpperLidRaiser", "RightEyeUpperLidRaiser",
+    "TongueDown", "TongueOut", "TongueUp",
+})
+
+#: A small, deliberate subset of those 50 — enough to read at Roblox camera
+#: distances, and named so a scene never mentions a coefficient.
 _FACS: dict[str, dict[str, float]] = {
     "neutral": {},
     "smug": {"LeftLipCornerPuller": 0.75, "RightLipCornerPuller": 0.2, "LeftBrowLowerer": 0.25},
-    "angry": {"LeftBrowLowerer": 0.9, "RightBrowLowerer": 0.9, "LipPressor": 0.6, "NoseWrinkler": 0.4},
+    "angry": {"LeftBrowLowerer": 0.9, "RightBrowLowerer": 0.9, "LipPresser": 0.6, "LeftNoseWrinkler": 0.4, "RightNoseWrinkler": 0.4},
     "afraid": {"LeftOuterBrowRaiser": 0.8, "RightOuterBrowRaiser": 0.8, "LeftEyeUpperLidRaiser": 0.9, "RightEyeUpperLidRaiser": 0.9, "JawDrop": 0.35},
     "surprised": {"LeftInnerBrowRaiser": 1.0, "RightInnerBrowRaiser": 1.0, "JawDrop": 0.5},
-    "pain": {"LeftEyeClosed": 0.85, "RightEyeClosed": 0.85, "NoseWrinkler": 0.7, "LipStretcher": 0.5},
-    "determined": {"LeftBrowLowerer": 0.5, "RightBrowLowerer": 0.5, "LipPressor": 0.4},
+    "pain": {"LeftEyeClosed": 0.85, "RightEyeClosed": 0.85, "LeftNoseWrinkler": 0.7, "RightNoseWrinkler": 0.7, "LeftLipStretcher": 0.5, "RightLipStretcher": 0.5},
+    "determined": {"LeftBrowLowerer": 0.5, "RightBrowLowerer": 0.5, "LipPresser": 0.4},
     "laughing": {"LeftLipCornerPuller": 1.0, "RightLipCornerPuller": 1.0, "JawDrop": 0.6, "LeftCheekRaiser": 0.7, "RightCheekRaiser": 0.7},
-    "sad": {"LeftInnerBrowRaiser": 0.8, "RightInnerBrowRaiser": 0.8, "LeftLipCornerDepressor": 0.6, "RightLipCornerDepressor": 0.6},
+    "sad": {"LeftInnerBrowRaiser": 0.8, "RightInnerBrowRaiser": 0.8, "LeftLipCornerDown": 0.6, "RightLipCornerDown": 0.6},
 }
 
 
