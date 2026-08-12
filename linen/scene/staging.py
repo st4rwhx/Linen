@@ -26,7 +26,6 @@ import numpy as np
 from ..rigs import get_rig
 from ..rigs.kinematics import forward_kinematics
 from .build import BuiltScene
-from .events import Event
 
 #: Roblox's default Workspace.Gravity, in studs per second squared — about
 #: twice Earth's. A trajectory computed with 9.81 lands nowhere near.
