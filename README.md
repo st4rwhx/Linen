@@ -405,7 +405,8 @@ là : c'est la **propriété réseau** en multijoueur, un problème qu'Euphoria 
 jamais eu puisque RDR2 est solo.
 
 Le détail complet — ce qui est fait, ce qui est possible, ce qui ne l'est pas et
-pourquoi — est dans [`docs/EUPHORIA.md`](docs/EUPHORIA.md).
+pourquoi — est dans [`docs/EUPHORIA.md`](docs/EUPHORIA.md), et la comparaison
+point par point avec RDR2 dans [`docs/RDR2.md`](docs/RDR2.md).
 
 > Les modules Luau sont **écrits et relus, pas exécutés** : je n'ai pas de
 > moteur Roblox ici. Prévois une passe de mise au point en Studio.
