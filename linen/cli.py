@@ -29,6 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     _add_bvh(sub)
     _add_prompt(sub)
     _add_synth(sub)
+    _add_scene(sub)
     sub.add_parser("providers", help="show which LLM providers are configured")
     sub.add_parser("vocabulary", help="list the pose and cycle names a plan may use")
 
@@ -38,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
         "bvh": _cmd_bvh,
         "prompt": _cmd_prompt,
         "synth": _cmd_synth,
+        "scene": _cmd_scene,
         "providers": _cmd_providers,
         "vocabulary": _cmd_vocabulary,
     }[args.command]
@@ -186,6 +188,60 @@ def _add_synth(sub) -> None:
     _add_common_output(parser)
 
 
+def _add_scene(sub) -> None:
+    parser = sub.add_parser(
+        "scene",
+        help="a cast of rigs on one timeline -> a cinematic",
+        description=(
+            "Build a multi-character scene: one animation per actor covering "
+            "the whole take, plus a Studio script that stages the rigs and "
+            "plays them in sync."
+        ),
+    )
+    parser.add_argument(
+        "file", type=Path, nargs="?", help="a scene JSON file (omit with --from-prompt)"
+    )
+    parser.add_argument(
+        "--from-prompt",
+        default=None,
+        help=(
+            "write the scene from a description instead of reading a file. "
+            "Needs a language model — choosing a cast and anchoring a cue "
+            "sheet is the one part keyword matching cannot do. A local Ollama "
+            "covers it for free."
+        ),
+    )
+    parser.add_argument(
+        "--save-scene", type=Path, default=None, help="also write the scene JSON"
+    )
+    parser.add_argument("--fps", type=float, default=30.0)
+    parser.add_argument(
+        "-o",
+        "--out",
+        type=Path,
+        required=True,
+        help="output directory for the per-actor .rbxmx files and the script",
+    )
+    parser.add_argument(
+        "--planner",
+        default="auto",
+        choices=("auto", "model", "offline"),
+        help="how each cue's prompt is planned (default: auto)",
+    )
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--tolerance", type=float, default=1.0, help="keyframe reduction, in degrees"
+    )
+    parser.add_argument(
+        "--folder",
+        default="ServerStorage.LinenAnimations",
+        help="where the generated script looks for the imported KeyframeSequences",
+    )
+    parser.add_argument(
+        "--preview", action="store_true", help="also write viewport JSON per actor"
+    )
+
+
 # ---------------------------------------------------------------------------
 def _target_rigs(args) -> list:
     """The rigs to write. ``--rig both`` covers R15 and R6 in one run."""
@@ -280,6 +336,59 @@ def _duration(value: str) -> float | None:
         raise ValueError(
             f"--duration expects seconds or 'auto', got {value!r}"
         ) from None
+
+
+def _cmd_scene(args) -> int:
+    from .scene import Scene, build_scene, scene_from_prompt, write_scene_script
+
+    if (args.file is None) == (args.from_prompt is None):
+        raise ValueError("pass either a scene file or --from-prompt, not both or neither")
+
+    if args.from_prompt is not None:
+        scene, provider = scene_from_prompt(args.from_prompt, fps=args.fps)
+        print(f"scene from {provider}")
+    else:
+        scene = Scene.from_dict(json.loads(args.file.read_text()))
+
+    if args.save_scene:
+        args.save_scene.parent.mkdir(parents=True, exist_ok=True)
+        args.save_scene.write_text(json.dumps(scene.to_dict(), indent=2))
+        print(f"{args.save_scene}: scene")
+
+    built = build_scene(scene, planner=args.planner, seed=args.seed)
+
+    print(
+        f"{scene.name}: {len(scene.actors)} actors, {len(built.schedule)} cues, "
+        f"{built.duration:.2f}s"
+    )
+    for entry in built.schedule:
+        what = entry.cue.prompt or entry.plan.name
+        print(
+            f"  {entry.start:6.2f}s  {entry.cue.actor:<10} {entry.cue.id:<14} "
+            f"{what[:42]}  [{entry.source}]"
+        )
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    for actor_name, clip in built.clips.items():
+        path = args.out / f"{scene.name}_{actor_name}.rbxmx"
+        frames = (
+            list(range(clip.frame_count))
+            if args.tolerance <= 0
+            else reduce_keyframes(clip, angular_tolerance_deg=args.tolerance)
+        )
+        write_rbxmx(clip, path, frames=frames)
+        print(f"{path}: {clip.rig.name}, {len(frames)} keyframes")
+        if args.preview:
+            from .export.preview import write_preview
+
+            write_preview(clip, args.out / f"{scene.name}_{actor_name}.json")
+
+    script = write_scene_script(
+        built, args.out / f"{scene.name}.server.luau", folder=args.folder
+    )
+    print(f"{script}: staging and playback script")
+    print(f"import the .rbxmx files into {args.folder}, then run the script in Studio")
+    return 0
 
 
 def _cmd_providers(_args) -> int:

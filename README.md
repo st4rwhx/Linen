@@ -112,6 +112,30 @@ appel : même un quota gratuit serré tient largement. La synthèse, elle, est
 locale et gratuite pour de bon — `linen synth` sur un plan écrit à la main ne
 touche jamais le réseau.
 
+### Sur le « photoréalisme »
+
+Un mot à clarifier, parce qu'il recouvre deux choses très différentes.
+
+**Le rendu** n'est pas de notre ressort. Un personnage Roblox est un assemblage
+de blocs, et c'est le moteur de Roblox qui l'éclaire et l'affiche. Aucune
+animation ne rendra un R15 photoréaliste : ce n'est pas ce que la plateforme
+dessine.
+
+**Le mouvement**, lui, peut absolument atteindre le réalisme — et c'est
+probablement ce que tu veux dire. Mais il n'existe que deux sources de réalisme
+de mouvement, et ni l'une ni l'autre n'est un vocabulaire de poses :
+
+1. **de la vraie captation** — `linen retarget` sur tes propres prises
+   FreeMoCap. C'est le plafond de qualité, et il est gratuit ;
+2. **un modèle entraîné sur de la captation** — `linen bvh` sur une sortie
+   SayMotion, ou sur MoMask/MDM lancés en local.
+
+Le planificateur hors-ligne, lui, ne sera jamais réaliste : il interpole entre
+des poses écrites à la main. Il est propre, lisible et instantané, ce qui en
+fait un excellent outil de **prévisualisation** — on monte la cinématique, on
+valide le timing, puis on remplace cue par cue par de la captation. C'est
+exactement le workflow d'un studio : previs d'abord, mocap ensuite.
+
 ### En résumé
 
 | Source | Qualité | Coût | Réseau | Quand |
@@ -275,6 +299,75 @@ disponibles.
 
 Voir [`viewport/README.md`](viewport/README.md) : deux fichiers à déposer dans
 `freemocap-ui`, un `<RobloxRig rig="R15" clip={clip} />` dans la scène.
+
+### Cinématiques multi-personnages
+
+```bash
+linen scene examples/confrontation.scene.json --planner offline -o build/
+```
+
+Sortie : **une animation par acteur** couvrant toute la prise, plus un script
+Luau qui place les rigs et lance tout en synchro.
+
+Une scène, c'est un casting et une feuille de cues. Ce qui la rend utilisable,
+c'est que chaque cue peut s'**ancrer sur une autre** plutôt que sur l'horloge :
+
+```json
+{ "id": "hit",   "actor": "Alice", "after": "approche", "prompt": "coup de poing droite" },
+{ "id": "recul", "actor": "Bob",   "with": "hit", "offset": 0.25, "prompt": "encaisse" }
+```
+
+| Ancrage | Sens |
+| --- | --- |
+| `at` | Temps absolu. À réserver aux ouvertures |
+| `after` | Démarre quand le cue nommé **finit**. Une conséquence |
+| `with` | Démarre quand le cue nommé **commence**. Deux choses en même temps |
+| rien | Enchaîne le cue précédent du même acteur |
+| `offset` | Décale l'ancrage, négatif accepté (anticiper le coup) |
+
+Rallonge l'approche d'Alice et le recul de Bob suit tout seul. C'est ce qui
+rend une cinématique retimeable au lieu d'être à refaire.
+
+Chaque acteur a **son propre rig** : Alice en R15, Bob en R6 dans la même scène,
+sans rien de particulier à faire.
+
+Le script généré utilise `KeyframeSequenceProvider:RegisterKeyframeSequence`,
+qui donne un ID d'animation temporaire — donc **la scène se teste sans rien
+uploader**. Ces IDs ne marchent qu'en Studio ; on publie normalement une fois
+la scène figée.
+
+#### Écrire la scène depuis un prompt
+
+```bash
+linen scene --from-prompt "Alice arrive, pointe Bob du doigt, le frappe ; Bob encaisse et recule" \
+  -o build/ --save-scene duel.json --planner offline
+```
+
+C'est le **seul** endroit de Linen qui exige vraiment un modèle de langage :
+choisir un casting, une mise en place et surtout décider quel beat s'accroche à
+quel autre, c'est de la lecture d'intention. Le matching de mots-clés n'en est
+pas capable, et prétendre le contraire produirait du n'importe quoi confiant.
+
+En revanche les cues eux-mêmes n'en ont pas besoin : `--planner offline` les
+anime sans réseau. Un Ollama local couvre la mise en scène gratuitement, le
+hors-ligne couvre l'animation — l'ensemble reste local.
+
+`--save-scene` écrit le JSON, qui se relit et se corrige à la main. C'est le
+mode de travail recommandé : le modèle propose le découpage, tu ajustes les
+`offset`, tu reconstruis.
+
+#### Ce que la scène ne fait pas
+
+**Le contact résolu.** Faire atterrir une main sur l'épaule de l'autre, pour
+deux rigs de proportions inconnues, demande un solveur IK avec conscience des
+collisions. Les cues donnent la mise en place et le timing — ce qui représente
+l'essentiel de ce qui *se lit* comme une interaction à l'écran — mais les
+derniers centimètres se règlent à la main dans l'Animation Editor.
+
+**Les visages.** R15 s'arrête au cou. « Parler » ici, c'est du geste et du
+mouvement de tête (cycles `talk`, `nod`, `shake_head`). La vraie animation
+faciale Roblox passe par les *dynamic heads* et `FaceControls` (50 poses FACS),
+qui sont un rig entièrement séparé — non couvert.
 
 ## Importer dans Roblox
 

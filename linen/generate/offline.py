@@ -55,8 +55,10 @@ class Beat:
 @dataclass(frozen=True)
 class Action:
     name: str
-    #: Accent-stripped, lowercase stems. Matched as substrings, so "march"
-    #: catches "marche", "marcher" and "marching".
+    #: Accent-stripped, lowercase stems, matched at a word boundary and then as
+    #: a prefix — "march" catches "marche", "marcher" and "marching", while
+    #: "coup" does *not* fire inside "beaucoup". Plain substring matching gets
+    #: that wrong often enough in French to be worth the regex.
     keywords: tuple[str, ...]
     beats: tuple[Beat, ...]
     priority: str = "Action"
@@ -80,7 +82,7 @@ ACTIONS: tuple[Action, ...] = (
     ),
     Action(
         "walk",
-        ("marche", "marcher", "walk", "avance", "pas ", "stroll"),
+        ("marche", "marcher", "walk", "avance", "stroll"),
         (Beat(2.2, cycle="walk"),),
         priority="Movement",
         loopable=True,
@@ -169,6 +171,47 @@ ACTIONS: tuple[Action, ...] = (
             Beat(0.85, pose="celebrate"),
             Beat(0.42, pose="stand_relaxed", easing="overshoot", blend_in=0.34),
         ),
+    ),
+    Action(
+        "back",
+        ("recul", "step back", "backward", "retraite", "eloigne", "back away"),
+        (
+            Beat(0.14, pose="stand_relaxed", easing="ease_out"),
+            Beat(0.20, pose="step_back", easing="ease_out", blend_in=0.16),
+            Beat(0.30, pose="step_back"),
+            Beat(0.36, pose="stand_relaxed", easing="ease_in_out", blend_in=0.28),
+        ),
+    ),
+    Action(
+        "flinch",
+        ("encaisse", "encaisser", "flinch", "recoil", "tressaill", "titube", "stagger"),
+        (
+            # Impact reactions are almost all snap and recovery: the pose the
+            # eye reads is held for a tenth of a second and then bleeds off.
+            Beat(0.10, pose="stand_relaxed", easing="ease_out"),
+            Beat(0.07, pose="flinch", easing="ease_out", blend_in=0.05),
+            Beat(0.16, pose="flinch"),
+            Beat(0.45, pose="stand_relaxed", easing="overshoot", blend_in=0.38),
+        ),
+    ),
+    Action(
+        "talk",
+        ("parle", "discute", "talk", "speak", "explique", "raconte", "converse"),
+        (Beat(2.6, cycle="talk"),),
+        loopable=True,
+        layers=(Layer("breathing", 0.5, 0.28),),
+    ),
+    Action(
+        "nod",
+        ("hoche", "acquiesce", "nod", "approuve"),
+        (Beat(1.4, cycle="nod"),),
+        loopable=True,
+    ),
+    Action(
+        "shake_head",
+        ("secoue la tete", "shake", "refuse", "nie ", "desapprouve"),
+        (Beat(1.2, cycle="shake_head"),),
+        loopable=True,
     ),
     Action(
         "t_pose",
@@ -296,9 +339,9 @@ def _match_action(clause: str) -> Action | None:
     best: tuple[int, Action] | None = None
     for action in ACTIONS:
         for keyword in action.keywords:
-            at = clause.find(keyword)
-            if at != -1 and (best is None or at < best[0]):
-                best = (at, action)
+            found = re.search(rf"\b{re.escape(keyword)}", clause)
+            if found and (best is None or found.start() < best[0]):
+                best = (found.start(), action)
     return best[1] if best else None
 
 

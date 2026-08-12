@@ -196,6 +196,48 @@ def test_retarget_writes_both_rigs_in_one_run(tmp_path, recording):
     assert "LeftUpperArm" in (tmp_path / "t.R15.rbxmx").read_text()
 
 
+def test_scene_writes_one_animation_per_actor_plus_a_script(monkeypatch, tmp_path, capsys):
+    _no_models(monkeypatch)
+    scene = tmp_path / "duel.json"
+    scene.write_text(
+        json.dumps(
+            {
+                "name": "Duel",
+                "actors": [
+                    {"name": "Alice", "rig": "R15", "facing": "Bob"},
+                    {"name": "Bob", "rig": "R6", "position": [0, 0, -6], "facing": "Alice"},
+                ],
+                "cues": [
+                    {"id": "hit", "actor": "Alice", "at": 0.5, "prompt": "coup de poing"},
+                    {"actor": "Bob", "with": "hit", "offset": 0.3, "prompt": "encaisse"},
+                ],
+            }
+        )
+    )
+    out = tmp_path / "build"
+    assert main(["scene", str(scene), "--planner", "offline", "-o", str(out)]) == 0
+
+    assert (out / "Duel_Alice.rbxmx").exists()
+    assert "Left Arm" in (out / "Duel_Bob.rbxmx").read_text()
+    script = (out / "Duel.server.luau").read_text()
+    assert "RegisterKeyframeSequence" in script
+    assert "2 actors" in capsys.readouterr().out
+
+
+def test_scene_needs_exactly_one_source(monkeypatch, tmp_path, capsys):
+    _no_models(monkeypatch)
+    assert main(["scene", "-o", str(tmp_path / "out")]) == 1
+    assert "either a scene file or --from-prompt" in capsys.readouterr().err
+
+
+def test_directing_a_scene_from_a_prompt_needs_a_model(monkeypatch, tmp_path, capsys):
+    _no_models(monkeypatch)
+    assert main(
+        ["scene", "--from-prompt", "deux personnes discutent", "-o", str(tmp_path / "out")]
+    ) == 1
+    assert "unreachable" in capsys.readouterr().err
+
+
 def test_vocabulary_lists_poses_and_cycles(capsys):
     assert main(["vocabulary"]) == 0
     out = capsys.readouterr().out

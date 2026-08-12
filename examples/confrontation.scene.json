@@ -1,0 +1,18 @@
+{
+  "name": "Confrontation",
+  "fps": 30,
+  "notes": "Two actors, six studs apart, facing each other. Bob's flinch is anchored to Alice's punch rather than to the clock, so retiming the punch retimes the reaction with it.",
+  "actors": [
+    { "name": "Alice", "rig": "R15", "position": [0, 0, 0], "facing": "Bob" },
+    { "name": "Bob", "rig": "R15", "position": [0, 0, -6], "facing": "Alice" }
+  ],
+  "cues": [
+    { "id": "alice_enter", "actor": "Alice", "at": 0.0, "prompt": "marche", "duration": 1.6 },
+    { "id": "alice_point", "actor": "Alice", "after": "alice_enter", "prompt": "pointe vers l'avant", "duration": 1.2 },
+    { "id": "alice_punch", "actor": "Alice", "after": "alice_point", "offset": 0.15, "prompt": "coup de poing droite tres rapide et explosif" },
+
+    { "id": "bob_wait", "actor": "Bob", "at": 0.0, "prompt": "reste immobile", "duration": 2.6 },
+    { "id": "bob_brace", "actor": "Bob", "with": "alice_punch", "offset": -0.2, "prompt": "accroupi vite", "duration": 0.8 },
+    { "id": "bob_reel", "actor": "Bob", "with": "alice_punch", "offset": 0.62, "prompt": "recule vite", "duration": 1.1 }
+  ]
+}

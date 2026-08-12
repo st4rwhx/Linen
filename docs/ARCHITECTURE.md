@@ -199,6 +199,44 @@ Les presets et les stratégies sont **émis** dans
 sélecteur de durée codé en dur dans le frontend finirait par proposer autre
 chose que ce que le planificateur accepte.
 
+## Les scènes
+
+[`linen/scene/`](../linen/scene/) fait tenir plusieurs rigs sur une timeline.
+Une animation répond à « que fait ce personnage » ; une cinématique répond à
+« que se font-ils *l'un à l'autre*, et quand » — et la seconde question est
+surtout un problème d'ordonnancement.
+
+**L'ancrage plutôt que l'horloge.** Un cue se place avec `at`, `after` (fin
+d'un autre cue), `with` (début d'un autre cue), ou rien du tout (enchaîne le
+cue précédent du même acteur), plus un `offset` signé. Rallonger une action
+retime automatiquement tout ce qui en dépend. La résolution est récursive avec
+détection de cycle : deux cues qui s'attendent l'un l'autre produisent un
+message qui **affiche la boucle**, pas une récursion infinie.
+
+**Un clip par acteur, pas un par cue.** Une cinématique jouée comme N pistes
+lancées à N instants différents dérive, et déboguer cette dérive est pénible.
+Chaque acteur reçoit une seule animation couvrant toute la prise, toutes lancées
+ensemble à t=0 — arrangement qui ne *peut* pas dériver. Les cues sont donc
+synthétisés séparément (ce qui préserve leur `energy` et leurs layers) puis
+**collés** dans le clip de l'acteur, avec un fondu court à l'entrée et un
+maintien de la dernière pose dans les trous.
+
+**Un acteur ne peut pas jouer deux cues à la fois.** Laisser silencieusement le
+dernier gagner donnerait l'impression que le premier a disparu sans raison ;
+l'erreur nomme les deux cues et le chevauchement.
+
+**Le script Luau** s'appuie sur
+`KeyframeSequenceProvider:RegisterKeyframeSequence`, qui rend un ID d'animation
+temporaire pour une `KeyframeSequence` présente dans la place ouverte. C'est ce
+qui permet de tester une cinématique multi-personnages **sans rien uploader**.
+Ces IDs sont Studio-only par conception.
+
+**Le directeur** ([`director.py`](../linen/scene/director.py)) est le seul
+module qui exige un modèle de langage. Décider d'un casting et ancrer une
+feuille de cues, c'est lire une intention dans une phrase — le planificateur
+hors-ligne ne peut pas, et le laisser essayer produirait des scènes
+plausibles mais fausses. Les cues, eux, restent planifiables hors-ligne.
+
 ## Choisir le rig
 
 `--rig` accepte `R15`, `R6` ou `both` sur toutes les commandes. Le cas `both`

@@ -184,6 +184,63 @@ _POINT_LEFT: PoseData = {
     "LeftHand": (5.0, 0.0, 0.0),
 }
 
+# --- reaction and conversation --------------------------------------------
+STEP_BACK: PoseData = {
+    "LowerTorso": (-6.0, 0.0, 0.0),
+    "UpperTorso": (-4.0, 0.0, 0.0),
+    "Head": (3.0, 0.0, 0.0),
+    "LeftUpperLeg": (-30.0, 0.0, -4.0),
+    "LeftLowerLeg": (-24.0, 0.0, 0.0),
+    "LeftFoot": (-12.0, 0.0, 0.0),
+    "RightUpperLeg": (14.0, 0.0, 4.0),
+    "RightLowerLeg": (-10.0, 0.0, 0.0),
+    "LeftUpperArm": (-18.0, 0.0, -15.0),
+    "LeftLowerArm": (32.0, 0.0, 0.0),
+    "RightUpperArm": (-18.0, 0.0, 15.0),
+    "RightLowerArm": (32.0, 0.0, 0.0),
+}
+
+#: Taking a hit: the torso folds away from the impact and the head goes with
+#: it, which is what sells a punch that never actually touches anything.
+FLINCH: PoseData = {
+    "LowerTorso": (-12.0, 8.0, 0.0),
+    "UpperTorso": (-18.0, 14.0, 0.0),
+    "Head": (16.0, 22.0, 0.0),
+    "LeftUpperArm": (-48.0, 0.0, -30.0),
+    "LeftLowerArm": (100.0, 0.0, 0.0),
+    "RightUpperArm": (-42.0, 0.0, 26.0),
+    "RightLowerArm": (96.0, 0.0, 0.0),
+    "LeftUpperLeg": (12.0, 0.0, -6.0),
+    "LeftLowerLeg": (-20.0, 0.0, 0.0),
+    "RightUpperLeg": (-14.0, 0.0, 6.0),
+    "RightLowerLeg": (-12.0, 0.0, 0.0),
+}
+
+_TALK_OPEN: PoseData = {
+    "UpperTorso": (2.0, -5.0, 0.0),
+    "Head": (-3.0, -7.0, 0.0),
+    "LeftUpperArm": (30.0, 0.0, -24.0),
+    "LeftLowerArm": (72.0, -20.0, 0.0),
+    "LeftHand": (0.0, 0.0, -12.0),
+    "RightUpperArm": (20.0, 0.0, 20.0),
+    "RightLowerArm": (56.0, 20.0, 0.0),
+}
+_TALK_CLOSE: PoseData = {
+    "UpperTorso": (2.0, 6.0, 0.0),
+    "Head": (2.0, 8.0, 0.0),
+    "LeftUpperArm": (16.0, 0.0, -14.0),
+    "LeftLowerArm": (50.0, -10.0, 0.0),
+    "RightUpperArm": (34.0, 0.0, 18.0),
+    "RightLowerArm": (80.0, 12.0, 0.0),
+    "RightHand": (0.0, 0.0, 10.0),
+}
+
+# R15 has no jaw, so "talking" is gesture and head motion. A dynamic head's
+# FaceControls would carry the mouth, and that is a separate rig entirely.
+_NOD_DOWN: PoseData = {"Head": (22.0, 0.0, 0.0), "UpperTorso": (3.0, 0.0, 0.0)}
+_NOD_UP: PoseData = {"Head": (-8.0, 0.0, 0.0)}
+_SHAKE_LEFT: PoseData = {"Head": (0.0, 26.0, 0.0), "UpperTorso": (0.0, 5.0, 0.0)}
+
 CELEBRATE: PoseData = {
     "UpperTorso": (-8.0, 0.0, 0.0),
     "Head": (-12.0, 0.0, 0.0),
@@ -268,6 +325,14 @@ POSES: dict[str, PoseData] = {
     "land": LAND,
     "sit": SIT,
     "celebrate": CELEBRATE,
+    "step_back": STEP_BACK,
+    "flinch": FLINCH,
+    "talk_open": _TALK_OPEN,
+    "talk_close": _TALK_CLOSE,
+    "nod_down": _NOD_DOWN,
+    "nod_up": _NOD_UP,
+    "shake_left": _SHAKE_LEFT,
+    "shake_right": mirror(_SHAKE_LEFT),
     "wave_left_up": _WAVE_LEFT_UP,
     "wave_left_out": _WAVE_LEFT_OUT,
     "wave_right_up": mirror(_WAVE_LEFT_UP),
@@ -336,6 +401,24 @@ CYCLES: dict[str, Cycle] = {
         ((0.0, "wave_right_up"), (0.5, "wave_right_out")),
         default_rate=2.0,
         tags=("gesture",),
+    ),
+    "talk": Cycle(
+        "talk",
+        ((0.0, "talk_open"), (0.5, "talk_close")),
+        default_rate=1.1,
+        tags=("gesture", "conversation"),
+    ),
+    "nod": Cycle(
+        "nod",
+        ((0.0, "nod_up"), (0.5, "nod_down")),
+        default_rate=1.5,
+        tags=("gesture", "conversation"),
+    ),
+    "shake_head": Cycle(
+        "shake_head",
+        ((0.0, "shake_left"), (0.5, "shake_right")),
+        default_rate=1.8,
+        tags=("gesture", "conversation"),
     ),
 }
 
