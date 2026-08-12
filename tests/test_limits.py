@@ -175,3 +175,14 @@ def test_no_authored_pose_asks_for_something_the_joints_forbid(pose_name):
                 f"{pose_name}/{part_name}: twist {twist_deg:.1f} deg outside "
                 f"{limit.twist} on {limit.joint}"
             )
+
+
+def test_the_checked_in_motion_data_matches_the_python_it_is_generated_from():
+    from linen.export.luau import motion_data_module
+
+    checked_in = Path(__file__).resolve().parent.parent / "runtime" / "MotionData.luau"
+    assert checked_in.exists(), "run `python -m linen.export.luau runtime`"
+    assert checked_in.read_text() == motion_data_module(), (
+        "runtime/MotionData.luau is stale — regenerate it with "
+        "`python -m linen.export.luau runtime`"
+    )

@@ -15,7 +15,7 @@ Python ([`limits.py`](../linen/rigs/limits.py)), testées là-bas, et **génér�
 en Luau. Le rig physique ne peut donc pas diverger du rig d'animation.
 
 > **Non exécuté.** Je n'ai pas de moteur Roblox ici. Les modules Luau sont
-> écrits et relus, pas testés. La couche de données, elle, l'est (225 tests).
+> écrits et relus, pas testés. La couche de données, elle, l'est (240 tests).
 > Prévois une passe de mise au point en Studio.
 
 ## Ce que Roblox fournit, et ce qu'il ne fournit pas
@@ -139,12 +139,92 @@ ragdolls actifs simultanés sur Roblox, avec un `AlignOrientation` par
 articulation, coûtera très cher. Prévois un budget : les N plus proches en
 ragdoll actif, les autres en ragdoll passif ou en animation.
 
+## Comment s'en approcher quand même
+
+Le plafond est réel, mais il porte sur *l'articulation*. Or l'essentiel de ce
+qui rend un personnage Rockstar vivant n'est pas de l'articulation — c'est du
+**timing entre articulations**, et ça ne coûte rien. Cinq leviers, du plus
+rentable au moins.
+
+### 1. Le drag — le meilleur rapport qualité/effort de tout le projet
+
+[`Secondary.luau`](../runtime/Secondary.luau) fait traîner chaque articulation
+derrière son parent. La main arrive après l'avant-bras, qui arrive après le
+bras. C'est le principe d'animation de l'**overlapping action**, celui qui
+sépare une animation faite à la main d'une interpolation — et l'appliquer
+procéduralement fait qu'un clip banal se met à ressembler à du travail
+d'animateur.
+
+Ça marche sur **n'importe quel R15**, y compris l'avatar d'un joueur, sans
+aucun os supplémentaire. Si tu ne dois retenir qu'une chose de ce document,
+c'est celle-là.
+
+### 2. Les ondes d'impact — la signature Euphoria, sans physique
+
+Un coup ne déplace pas tout le corps d'un coup : la perturbation **part du
+point de contact et voyage** vers l'extérieur, arrivant plus tard et plus
+faible à chaque articulation. C'est ça qu'on reconnaît dans RDR2.
+
+`Secondary:impact()` le fait de façon purement procédurale — donc ça fonctionne
+aussi sur un personnage que tu ne veux **pas** passer en ragdoll, et ça arrive
+sur la même frame au lieu d'attendre que la physique se stabilise. L'axe de
+rotation est perpendiculaire à la poussée : un coup de face fait tanguer, un
+coup de côté fait rouler. Prendre l'axe de la poussée elle-même ferait pivoter
+le personnage autour de l'axe du coup, ce qui n'arrive jamais à un corps.
+
+### 3. Le regard
+
+Les personnages Euphoria regardent ce qui les menace, et **la tête précède le
+corps**. `Secondary:lookAt()` répartit la rotation entre la tête et le buste,
+avec des butées — une tête qui continue de tourner au-delà de sa limite est
+l'artefact « cou de hibou » classique. Rien n'achète autant d'intelligence
+perçue par ligne de code.
+
+### 4. Le patinage : ce n'est pas un problème d'animation
+
+C'est de l'arithmétique. Un cycle de marche parcourt une distance précise par
+tour — et si la vitesse du personnage n'est pas celle-là, les pieds **doivent**
+glisser, quelle que soit la qualité du clip.
+
+Linen calcule cette distance **par cinématique directe sur les poses**
+([`stride.py`](../linen/generate/stride.py)) plutôt que de la déclarer à la
+main : élargis une pose de contact et la foulée suit toute seule. Le chiffre
+part dans `MotionData.luau`, et [`Locomotion.luau`](../runtime/Locomotion.luau)
+joue le clip à `vitesse_réelle / vitesse_naturelle`.
+
+| Cycle | Foulée | Vitesse naturelle |
+| --- | --- | --- |
+| `walk` | 7,77 studs | 7,0 studs/s |
+| `run` | 11,88 studs | 19,0 studs/s |
+
+Le même module mélange idle/marche/course par **poids continus fonction de la
+vitesse** — pas de machine à états, donc pas de transition à déclencher ni dans
+laquelle rester coincé.
+
+### 5. Et si tu contrôles le modèle : des vraies vertèbres
+
+Pour les PNJ, tu n'es pas obligé de rester sur R15. Roblox supporte les
+personnages **skinnés avec des instances `Bone`**, `IKControl` accepte les
+`Bone` comme cibles, et — le point important — **une animation R15 peut piloter
+un personnage à os supplémentaires** tant que les os correspondants sont
+orientés comme les Motor6D d'origine.
+
+Donc : un PNJ avec trois vertèbres au lieu d'une, qui rejoue tes animations
+R15 existantes, avec la torsion de colonne ajoutée procéduralement par-dessus.
+C'est le seul chemin qui lève réellement le plafond — mais il ne s'applique pas
+aux avatars des joueurs, qui arrivent en R15 standard.
+
 ## L'objectif réaliste
 
-Avec ces quatre modules, tu es **très largement au-dessus du Roblox standard** —
-pieds ancrés sur le relief, réactions aux impacts localisées, perte d'équilibre
-progressive, inertie visible. Ça place ton jeu dans le haut du panier de la
-plateforme.
+Avec ces six modules, tu es **très largement au-dessus du Roblox standard** —
+pieds ancrés sur le relief, zéro patinage, réactions aux impacts qui se
+propagent, regard qui suit, perte d'équilibre progressive, inertie visible.
+Ça place ton jeu dans le haut du panier de la plateforme.
+
+Et il faut voir d'où vient le gain : les modules physiques (ragdoll, équilibre)
+coûtent cher et servent aux moments forts, alors que le **drag, les ondes
+d'impact et le regard sont presque gratuits et tournent en permanence**. C'est
+ce deuxième groupe qui fait le plus pour l'impression générale.
 
 Tu n'auras pas la parité RDR2, et la raison principale n'est ni ton code ni le
 moteur : c'est qu'un R15 a quinze blocs et une articulation de colonne. Viser

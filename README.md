@@ -381,11 +381,21 @@ et modifie les personnages pendant qu'ils bougent.
 | [`FootPlanting`](runtime/FootPlanting.luau) | Pieds ancrés sur le relief via `IKControl` natif, bassin abaissé avant résolution |
 | [`Balance`](runtime/Balance.luau) | Centre de masse projeté dans le polygone de sustentation, marge en studs |
 | [`Momentum`](runtime/Momentum.luau) | Le buste s'incline contre l'accélération, lu sur la vélocité réelle |
+| [`Secondary`](runtime/Secondary.luau) | **Drag** entre articulations, **ondes d'impact** qui se propagent, regard, tremblement |
+| [`Locomotion`](runtime/Locomotion.luau) | Mélange piloté par la vitesse, cadence calée sur la foulée — **fin du patinage** |
 
 Les limites articulaires sont définies et testées **en Python**, puis générées
 en Luau — le rig physique ne peut pas diverger du rig d'animation. Un test
 vérifie qu'aucune pose de la banque ne demande quelque chose que les contraintes
 interdisent (il a attrapé un salut qui pliait le coude latéralement).
+
+Le plus rentable n'est pas la physique mais le **drag** : faire traîner chaque
+articulation derrière son parent (overlapping action) fait qu'un clip banal se
+met à ressembler à du travail d'animateur — sur n'importe quel R15, sans un seul
+os supplémentaire. Et le patinage n'est pas un problème d'animation mais
+d'arithmétique : Linen calcule la foulée de chaque cycle **par cinématique
+directe sur les poses**, et le runtime joue le clip à `vitesse_réelle /
+vitesse_naturelle`.
 
 **Objectif réaliste, dit franchement :** tu passes très largement au-dessus du
 Roblox standard. Tu n'auras pas la parité RDR2 — R15 a quinze blocs et **une

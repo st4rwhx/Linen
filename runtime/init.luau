@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Linen runtime: the four modules wired together on one character.
+	Linen runtime: the movement modules wired together on one character.
 
 	Use it directly for the common case, or ignore it and drive the modules
 	yourself — they do not depend on each other, only on RigLimits.
@@ -15,30 +15,38 @@
 
 	The ordering below is the part that is not obvious. Every frame:
 
-	  1. the Animator writes the pose;
-	  2. Momentum leans the spine on top of it (PreRender);
-	  3. FootPlanting solves the legs onto the ground (PreRender, after);
-	  4. physics steps, and any active ragdoll drive runs (PreSimulation);
-	  5. Balance reads where the body ended up (PostSimulation).
+	  1. Locomotion blends the gaits by velocity (PreSimulation);
+	  2. the Animator writes the pose;
+	  3. Secondary drags the joints, propagates impacts, aims the gaze;
+	  4. Momentum leans the spine on top of that (PreRender);
+	  5. FootPlanting solves the legs onto the ground (PreRender, after);
+	  6. physics steps, and any active ragdoll drive runs (PreSimulation);
+	  7. Balance reads where the body ended up (PostSimulation).
 
-	Reversing 2 and 3 is the classic mistake: leaning after the feet are planted
-	drags them off the ground again.
+	Reversing the lean and the foot solve is the classic mistake: leaning after
+	the feet are planted drags them off the ground again.
 ]]
 
 local RunService = game:GetService("RunService")
 
 local Balance = require(script.Balance)
 local FootPlanting = require(script.FootPlanting)
+local Locomotion = require(script.Locomotion)
 local Momentum = require(script.Momentum)
+local MotionData = require(script.MotionData)
 local Ragdoll = require(script.Ragdoll)
 local RigLimits = require(script.RigLimits)
+local Secondary = require(script.Secondary)
 
 local Linen = {}
 Linen.Balance = Balance
 Linen.FootPlanting = FootPlanting
+Linen.Locomotion = Locomotion
 Linen.Momentum = Momentum
+Linen.MotionData = MotionData
 Linen.Ragdoll = Ragdoll
 Linen.RigLimits = RigLimits
+Linen.Secondary = Secondary
 
 local Body = {}
 Body.__index = Body
@@ -51,6 +59,7 @@ export type Body = typeof(setmetatable(
 		feet: FootPlanting.FootPlanting?,
 		momentum: Momentum.Momentum?,
 		balance: Balance.Balance?,
+		secondary: Secondary.Secondary?,
 		_recovering: boolean,
 	},
 	Body
@@ -60,6 +69,7 @@ export type Options = {
 	footPlanting: boolean?,
 	momentum: boolean?,
 	balance: boolean?,
+	secondary: boolean?,
 	--[[ How hard a fallen body keeps trying. Zero is a corpse; around 0.3 is
 	     someone who has been knocked down and is still tensed. ]]
 	fallStrength: number?,
@@ -86,9 +96,18 @@ function Linen.attach(character: Model, options: Options?): Body?
 		feet = nil,
 		momentum = nil,
 		balance = nil,
+		secondary = nil,
 		_recovering = false,
 	}, Body)
 
+	-- Drag, impact waves, gaze and tremor. Purely visual, so client-side, and
+	-- the highest ratio of perceived life to cost in the whole library.
+	if client and opts.secondary ~= false then
+		self.secondary = Secondary.new(character)
+		if self.secondary then
+			self.secondary:start()
+		end
+	end
 	if client and opts.footPlanting ~= false then
 		self.feet = FootPlanting.new(character)
 		if self.feet then
@@ -124,6 +143,13 @@ function Body.hit(
 	joints: { string }?,
 	strength: number?
 )
+	-- The procedural wave first, and unconditionally: it reads as a hit even on
+	-- a character you never want to ragdoll, and it arrives on the same frame
+	-- rather than waiting for physics to settle.
+	if self.secondary then
+		self.secondary:impact(part.Name, impulse.Unit, math.clamp(impulse.Magnitude / 60, 2, 22))
+	end
+
 	local ragdoll = self.ragdoll
 	if ragdoll == nil then
 		return
@@ -151,6 +177,10 @@ function Body.collapse(self: Body, strength: number)
 	if self.momentum then
 		self.momentum:setWeight(0)
 	end
+	if self.secondary then
+		-- Drag on top of a physics simulation is drag on top of drag.
+		self.secondary:setWeight(0)
+	end
 end
 
 --[[ Back to animation. Play a get-up animation over this; on its own it is a
@@ -164,6 +194,9 @@ function Body.recover(self: Body)
 	end
 	if self.momentum then
 		self.momentum:setWeight(1)
+	end
+	if self.secondary then
+		self.secondary:setWeight(1)
 	end
 	if self.balance then
 		self.balance:onFall(function(state)
@@ -184,6 +217,9 @@ function Body.destroy(self: Body)
 	end
 	if self.balance then
 		self.balance:stop()
+	end
+	if self.secondary then
+		self.secondary:stop()
 	end
 end
 
