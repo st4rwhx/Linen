@@ -33,6 +33,10 @@ et à côté de chacun un `.html` du même nom.
 **Double-clique `examples/starter/R15/Walk.html`.** Il s'ouvre dans ton
 navigateur et le rig marche.
 
+> Et va voir **[`examples/demo/`](../examples/demo/)** : la cinématique
+> complète, et la même marche composée à la main puis captée en studio, pour
+> comparer.
+
 Pas de serveur, pas d'installation, pas de compte : la page contient
 l'animation. Elle marche hors-ligne, tu peux l'envoyer à quelqu'un par mail.
 
