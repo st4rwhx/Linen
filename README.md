@@ -15,6 +15,11 @@ prompt texte, sans coût d'API.
 > **[`docs/ANIMATIONS_DE_FOU.md`](docs/ANIMATIONS_DE_FOU.md)** : pourquoi toute
 > la pile IA text-to-motion est fermée pour un jeu qu'on vend, quelles
 > bibliothèques sont réellement utilisables, et comment un prompt y pioche.
+>
+> **Ce que Roblox n'a pas documenté :**
+> **[`docs/ETAT_DE_L_ART.md`](docs/ETAT_DE_L_ART.md)** — Animation Graphs,
+> inertialisation native, synchronisation de phase, mocap depuis une vidéo :
+> ce que le dump d'API révèle et que la doc ne dit pas.
 
 ```bash
 # un prompt -> une animation. Aucune clé, aucun GPU, aucun réseau.
