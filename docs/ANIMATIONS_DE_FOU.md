@@ -127,7 +127,42 @@ offset(t) = e^(−y·t) · (x + (v + x·y)·t)
 Autrement dit : la qualité AAA ne vient pas d'un générateur. Elle vient d'une
 **bibliothèque** plus d'un **choix** plus des **raccords propres**.
 
-C'est reproductible. Et ça n'a aucun problème de licence.
+C'est reproductible. Et ça n'a aucun problème de licence. **C'est fait** — voir
+la section suivante.
+
+### Les raccords, mesurés
+
+Une phrase à trois temps, c'est trois clips, et les raccords sont tout le
+problème : coupé net, le personnage se téléporte d'une pose à l'autre.
+
+Mesuré sur de vraies captures CMU, coupées course → marche → coup de poing,
+en degrés parcourus sur l'image la pire du raccord :
+
+| | pic (°/image) | aire |
+| --- | --- | --- |
+| concaténation brute | 109,8 / 61,5 | 442 / 171 |
+| inertialisation | 32,8 / 29,8 | 344 / 125 |
+| **+ choix du point d'entrée** | **3,5 / 2,3** | **89 / 66** |
+
+Le mouvement ordinaire dans ces clips fait environ **3,4 °/image**. La dernière
+ligne est donc un raccord qu'on **ne peut pas voir**.
+
+Et la leçon est dans l'écart entre les deux dernières lignes : le ressort compte
+beaucoup moins que le fait de **ne pas couper sur une mauvaise pose**. C'est
+exactement ce que dit le motion matching, et c'est la partie qu'on rate en le
+résumant à « du blending intelligent » : il ne s'agit pas de mélanger mieux, il
+s'agit de **ne pas avoir à mélanger**. On cherche dans le clip entrant l'image
+qui ressemble déjà à la pose sortante, et on démarre là.
+
+```bash
+linen prompt "il court vite puis il marche et il donne un coup de poing" \
+     --library cmu.json -o build/phrase.rbxmx
+# 'il court vite'             -> 02_03: run/jog
+# 'il marche'                 -> 02_01: walk
+# 'il donne un coup de poing' -> 02_05: punch/strike
+#   raccord a 1.45s : 3.5 deg/frame
+#   raccord a 3.05s : 4.8 deg/frame
+```
 
 ---
 
@@ -208,19 +243,16 @@ lui-même. Les ratios survivent ; les valeurs absolues non.
 | Lire du BVH CMU / Mixamo → animation Roblox | **Fait et testé** |
 | Indexer une bibliothèque et la mesurer | **Fait et testé** |
 | Prompt FR → vrai clip mocap → `.rbxmx` + `.html` | **Fait et testé** |
-| Le prompt compose plusieurs clips à la suite | **Pas encore** |
-| Raccords par inertialisation | **Pas encore** |
+| Le prompt compose plusieurs clips à la suite | **Fait et testé** |
+| Raccords par inertialisation + choix du point d'entrée | **Fait et testé** |
 | Découper une prise longue au bon endroit | **Pas encore** — `--duration` coupe au début |
 | Modèle génératif embarqué | **Non**, et la licence l'interdit pour ton jeu |
 
-Ce qui manque le plus, dans l'ordre :
+Ce qui manque le plus :
 
-1. **Les raccords.** Aujourd'hui un prompt sort *un* clip. Pour enchaîner
-   « il court, s'arrête, frappe », il faut coller trois clips proprement —
-   c'est l'inertialisation, la formule est dans la section 4.
-2. **Le découpage.** Les prises CMU durent parfois 40 secondes et contiennent
-   plusieurs actions. Trouver *quelle* portion répond au prompt est un autre
-   problème que trouver la prise.
+**Le découpage.** Les prises CMU durent parfois 40 secondes et contiennent
+plusieurs actions. Trouver *quelle* portion répond au prompt est un autre
+problème que trouver la prise ; `--duration` coupe au début.
 
 ---
 

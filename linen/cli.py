@@ -19,6 +19,9 @@ from .generate.providers import (
 )
 from .rigs import get_rig
 
+#: Seconds per beat when a prompt with several beats gives no duration.
+DEFAULT_BEAT_SECONDS = 2.0
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="linen", description=__doc__)
@@ -445,37 +448,65 @@ def _cmd_prompt(args) -> int:
 
 
 def _prompt_from_library(args) -> int:
-    """Answer a prompt with real capture rather than composed poses."""
+    """Answer a prompt with real capture rather than composed poses.
+
+    A sentence with several beats becomes several clips, joined so the seam
+    does not show. "Il court, il s'arrete, il frappe" is three retrievals.
+    """
+    from .generate.offline import _split_clauses
     from .library import Library, describe
     from .retarget import SolveOptions, solve_clip
     from .sources import load_bvh
+    from .transitions import chain, seam_error
 
     library = Library.load(args.library)
-    hits = library.search(args.text, limit=5)
-    if not hits:
+    clauses = _split_clauses(args.text) or [args.text]
+
+    chosen = []
+    for clause in clauses:
+        hits = library.search(clause, limit=4)
+        if not hits:
+            print(f"  (rien pour {clause!r}, ignore)", file=sys.stderr)
+            continue
+        score, entry = hits[0]
+        print(f"{clause!r} -> {entry.name}: {entry.description}  "
+              f"[{describe(entry)}]  score {score:.2f}")
+        for other_score, other in hits[1:3]:
+            print(f"     sinon: {other.name:12} {other.description[:40]:42} {other_score:.2f}")
+        chosen.append(entry)
+
+    if not chosen:
         raise ValueError(
             f"aucun des {len(library.entries)} clips ne correspond a "
             f"{args.text!r}. Essaie `linen library search` pour voir ce que la "
             f"bibliotheque contient."
         )
 
-    score, entry = hits[0]
-    print(f"{entry.name}: {entry.description}  [{describe(entry)}]  score {score:.2f}")
-    for other_score, other in hits[1:4]:
-        print(f"  sinon: {other.name:12} {other.description[:44]:46} {other_score:.2f}")
+    # Each beat gets an equal share of the asked-for length, so a three-part
+    # sentence does not come back as forty seconds of the first take.
+    target = _duration(args.duration)
+    share = target / len(chosen) if target else DEFAULT_BEAT_SECONDS
 
-    track = load_bvh(library.resolve(entry), skeleton="mixamo", units="cm")
-    clips = []
+    written = []
     for rig in _target_rigs(args):
-        clip = solve_clip(
-            rig,
-            track,
-            # `prompt` has no --smoothing of its own; capture needs a little.
-            SolveOptions(root_motion=args.motion == "natural", smoothing_frames=3),
-        )
-        clip.name = entry.name
-        clips.append(_trim(clip, _duration(args.duration)))
-    return _write(clips, args)
+        pieces = []
+        for entry in chosen:
+            track = load_bvh(library.resolve(entry), skeleton="mixamo", units="cm")
+            clip = solve_clip(
+                rig,
+                track,
+                # `prompt` has no --smoothing of its own; capture needs a little.
+                SolveOptions(root_motion=args.motion == "natural", smoothing_frames=3),
+            )
+            clip.name = entry.name
+            pieces.append(_trim(clip, share))
+
+        joined = chain(pieces, name=args.text[:40])
+        for seam in joined.metadata.get("seams", []):
+            worst = max(seam_error(joined, seam + k) for k in range(8))
+            print(f"  raccord a {seam / joined.fps:.2f}s : {worst:.1f} deg/frame")
+        written.append(joined)
+    return _write(written, args)
 
 
 def _trim(clip: AnimationClip, seconds: float | None) -> AnimationClip:
