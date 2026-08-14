@@ -201,6 +201,15 @@ def _add_prompt(sub) -> None:
         "--save-plan", type=Path, default=None, help="also write the plan as JSON"
     )
     parser.add_argument(
+        "--name",
+        default=None,
+        help=(
+            "animation name — what Studio shows in the Animation Editor and "
+            "what the published asset is called. Defaults to the plan's name, "
+            "or with --library to the sentence itself, which makes a poor one"
+        ),
+    )
+    parser.add_argument(
         "--library",
         type=Path,
         default=None,
@@ -443,8 +452,11 @@ def _cmd_prompt(args) -> int:
         args.save_plan.write_text(json.dumps(plan.to_dict(), indent=2))
         print(f"  plan -> {args.save_plan}")
 
-    return _write(_synthesize_all(plan, args), args)
-
+    clips = _synthesize_all(plan, args)
+    if args.name:
+        for clip in clips:
+            clip.name = args.name
+    return _write(clips, args)
 
 
 def _prompt_from_library(args) -> int:
@@ -501,7 +513,7 @@ def _prompt_from_library(args) -> int:
             clip.name = entry.name
             pieces.append(_trim(clip, share))
 
-        joined = chain(pieces, name=args.text[:40])
+        joined = chain(pieces, name=args.name or args.text[:40])
         for seam in joined.metadata.get("seams", []):
             worst = max(seam_error(joined, seam + k) for k in range(8))
             print(f"  raccord a {seam / joined.fps:.2f}s : {worst:.1f} deg/frame")

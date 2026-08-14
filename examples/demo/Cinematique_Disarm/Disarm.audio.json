@@ -1,0 +1,32 @@
+{
+  "scene": "Disarm",
+  "//": "Colle un rbxassetid:// en face de chaque slot. Les slots remplis sont conservés quand la scène est régénérée.",
+  "sounds": {
+    "punch_impact": "",
+    "footstep": "rbxasset://sounds/action_footsteps_plastic.mp3",
+    "jump_land": "rbxasset://sounds/action_jump_land.mp3",
+    "effort": "rbxasset://sounds/uuhhh.mp3",
+    "prop_throw": "",
+    "prop_impact": "",
+    "dialogue": "",
+    "ambient_bed": "",
+    "tension_drone": "",
+    "riser": "",
+    "sting": "",
+    "heartbeat": ""
+  },
+  "notes": {
+    "punch_impact": "Impact d'un poing sur un corps — sourd, court, avec du grave",
+    "footstep": "Un pas. Prends-en plusieurs variantes si tu peux, sinon la hauteur varie toute seule à chaque pas",
+    "jump_land": "Réception au sol après un saut ou une chute — poids qui arrive",
+    "effort": "Souffle ou grognement d'effort du personnage qui frappe ou encaisse",
+    "prop_throw": "Objet qui quitte la main et fend l'air",
+    "prop_impact": "L'objet arrive sur le décor — impact sec puis rebond/ferraille",
+    "dialogue": "Une piste par réplique, dans cet ordre — 1. Hahaha, you couldn't even swing me!; 2. Nooo...",
+    "ambient_bed": "Le fond permanent du lieu : air, salle, extérieur. Sans lui la scène sonne comme une cabine",
+    "tension_drone": "Nappe grave et tenue, qui monte quand ça chauffe. C'est elle qui fait que le spectateur sait que ça va mal se passer",
+    "riser": "Montée juste avant le point culminant — 1 à 2 secondes qui gonflent",
+    "sting": "Frappe musicale sur le pic : le coup qui compte, pas les autres",
+    "heartbeat": "Battement de cœur lent sous la scène, pour le personnage qui prend cher. C'est ce qui fait sentir qu'on est mal en point"
+  }
+}

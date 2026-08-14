@@ -1,7 +1,20 @@
-# Démos — à ouvrir dans un navigateur
+# Démos — regarder d'abord, importer ensuite
 
-Quatre pages. **Double-clique, ça joue.** Pas de serveur, pas d'installation,
-pas de compte : chaque page contient son animation. Elles marchent hors-ligne.
+Chaque démo est **une paire** :
+
+- le `.html` s'ouvre dans ton navigateur, **double-clique, ça joue**. Pas de
+  serveur, pas d'installation, pas de compte : la page contient l'animation ;
+- le `.rbxmx` du même nom est le **même mouvement**, prêt à importer dans Roblox
+  Studio (Animation Editor → `⋯` → **Import** → **From File…**).
+
+Regarde la page avant d'importer. C'est la seule étape qui te dit si un fichier
+vaut la peine d'être publié — et si le rig bouge autrement dans Studio, c'est
+l'import qui a raté, pas l'animation : tu viens de la voir jouer correctement.
+
+> Ce n'est pas une promesse en l'air : `tests/test_examples.py` compare, pose
+> par pose et image-clé par image-clé, ce que porte chaque page et ce que porte
+> le `.rbxmx` à côté. Sur les douze paires livrées, l'écart maximum est de
+> **0,07°** — c'est l'arrondi des deux formats de texte, rien d'autre.
 
 | | |
 | --- | --- |
@@ -13,39 +26,49 @@ pas de compte : chaque page contient son animation. Elles marchent hors-ligne.
 
 ---
 
-## `Cinematique_Disarm.html`
+## Comment récupérer ces fichiers
 
-La cinématique complète de [`disarm.scene.json`](../disarm.scene.json) : deux
-acteurs, le décor calculé, les cues en couloirs, tous les événements en repères
-sous la barre, la courbe de tension derrière.
+Sur GitHub, **cliquer sur un `.html` ne l'ouvre pas** — GitHub affiche le code
+source. Deux façons de vraiment les avoir sur ton disque :
 
-**Clique « 🎬 Caméra du réalisateur »** : la prise se joue à travers les plans
-écrits dans la scène, avec leur focale et leur dérive. C'est le cadrage que tu
-auras dans Studio.
+- **Tout d'un coup** — sur la page d'accueil du dépôt, bouton vert **Code** →
+  **Download ZIP**. C'est ce qu'il faut faire la première fois : tu obtiens
+  aussi `examples/starter/` et `runtime/`.
+- **Un seul fichier** — ouvre-le sur GitHub, puis bouton **Download raw file**
+  (l'icône ⤓ en haut à droite du fichier). Sur les gros `.rbxmx`, GitHub dit
+  « this file is too big to display » et ne montre que ce bouton : c'est normal
+  et c'est le bon.
 
-Le personnage est en boîtes parce qu'un Block Rig en est. Avec un rig Blender :
-`linen scene ... --skin ton_rig.blend` et la page gagne un sélecteur.
+---
 
-## `Posebook_marche.html` vs `Mocap_CMU_marche.html`
+## Les paires
+
+### `Posebook_marche` vs `Mocap_CMU_marche`
 
 **La comparaison qui compte.** Les deux marchent. Regarde-les de **profil**,
-vitesse **0,25×**, l'un après l'autre.
+vitesse **0,25×**, l'une après l'autre.
 
-- `Posebook_marche.html` — composée à partir du vocabulaire de poses écrit à la
-  main. Propre, lisible, et on voit que c'est dessiné.
-- `Mocap_CMU_marche.html` — une vraie captation studio (CMU `02_01`), reciblée
-  sur R15 sans une ligne de code en plus.
+| Fichiers | Ce que c'est |
+| --- | --- |
+| `Posebook_marche.html` + `.rbxmx` | Composée à partir du vocabulaire de poses écrit à la main. Propre, lisible, et on voit que c'est dessiné. |
+| `Mocap_CMU_marche.html` + `.rbxmx` | Une vraie captation studio (CMU `02_01`), reciblée sur R15 sans une ligne de code en plus. |
 
 C'est tout l'écart entre « ça marche » et « ça a l'air vrai », et c'est pour ça
 que `linen library` existe.
 
-## `Mocap_CMU_enchainee.html`
+```bash
+linen prompt "il marche" --duration 3 --planner offline --name Posebook_Marche \
+     -o examples/demo/Posebook_marche.rbxmx
+```
+
+### `Mocap_CMU_enchainee`
 
 Une phrase à trois temps → trois vraies captations, enchaînées :
 
 ```bash
 linen prompt "il court vite puis il marche et il donne un coup de poing" \
-     --library cmu.json -o build/phrase.rbxmx
+     --library cmu.json --name CMU_Enchainee \
+     -o examples/demo/Mocap_CMU_enchainee.rbxmx
 ```
 
 Les raccords sont à **1,45 s** et **3,05 s**. Va les regarder image par image :
@@ -56,11 +79,50 @@ fond.
 Le raisonnement complet est dans
 [`docs/ANIMATIONS_DE_FOU.md`](../../docs/ANIMATIONS_DE_FOU.md).
 
+> C'est un fichier de 6,8 Mo : 506 images-clés à 120 Hz, la cadence de la
+> captation d'origine. L'import dans Studio prend quelques secondes.
+
+### `Cinematique_Disarm/` — la scène complète
+
+Six fichiers, parce qu'une cinématique n'est pas une animation : c'est un
+casting, une caméra et une bande son.
+
+| Fichier | Ce que c'est |
+| --- | --- |
+| `Disarm.html` | La prise entière : deux acteurs, le décor calculé, les cues en couloirs, tous les événements en repères sous la barre, la courbe de tension derrière. |
+| `Disarm_Hero.rbxmx` | L'animation du héros, toute la prise (4,72 s). À importer. |
+| `Disarm_Thug.rbxmx` | Celle de l'autre, sur la même timeline. À importer. |
+| `Disarm_Blockout.rbxmx` | Le décor en boîtes — glisse-le dans `Workspace`, il se place tout seul. |
+| `Disarm.server.luau` | Le script qui pose les rigs, joue les deux animations en sync, coupe les plans caméra et déclenche les sons. |
+| `Disarm.audio.json` | La feuille de spotting : un slot par catégorie de son, avec la description de ce qu'il te faut. Colle un `rbxassetid://` en face, régénère, c'est câblé. |
+
+**Dans la page, clique « 🎬 Caméra du réalisateur »** : la prise se joue à
+travers les plans écrits dans la scène, avec leur focale et leur dérive. C'est
+le cadrage que tu auras dans Studio.
+
+```bash
+linen scene examples/disarm.scene.json -o examples/demo/Cinematique_Disarm
+```
+
+L'ordre de montage dans Studio est en tête de `Disarm.server.luau`, et le détail
+des sons dans [`docs/SON.md`](../../docs/SON.md).
+
+---
+
+> Le personnage est en boîtes parce qu'un Block Rig en est. Si tu as un rig R15
+> pour Blender, `linen scene ... --skin ton_rig.blend` l'affiche à la place, et
+> la page gagne un sélecteur pour basculer entre les deux.
+
+> Tu cherches les sept animations de base — `Idle`, `Walk`, `Run`, `Jump`,
+> `Fall`, `Land`, `Sit` ? Elles ne sont pas ici mais dans
+> **[`examples/starter/R15/`](../starter/R15/)**, en paires `.html` + `.rbxmx`
+> elles aussi. C'est de là que part [`docs/DEMARRAGE.md`](../../docs/DEMARRAGE.md).
+
 ---
 
 ## Attribution
 
-Les deux pages `Mocap_CMU_*` contiennent du mouvement de la **CMU Graphics Lab
+Les deux paires `Mocap_CMU_*` contiennent du mouvement de la **CMU Graphics Lab
 Motion Capture Database**, qui demande cette mention :
 
 > The data used in this project was obtained from mocap.cs.cmu.edu. The

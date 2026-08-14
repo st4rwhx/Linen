@@ -13,8 +13,15 @@ vérifie quelque chose que la suivante suppose acquis.
 Sur la page GitHub du dépôt, bouton vert **Code** → **Download ZIP**. Dézippe
 quelque part de simple, par exemple sur ton Bureau.
 
-Ce dont tu as besoin est dans `examples/starter/R15/` : sept fichiers `.rbxmx`,
-et à côté de chacun un `.html` du même nom.
+Ce dont tu as besoin est dans **`examples/starter/R15/`** : sept fichiers
+`.rbxmx`, et à côté de chacun un `.html` du même nom. `Walk.rbxmx` et
+`Walk.html` sont **là**, pas ailleurs — c'est ce dossier qu'on ouvre à chaque
+étape de ce guide.
+
+> Pas envie du ZIP ? Tu peux prendre un seul fichier : ouvre-le sur GitHub, puis
+> bouton **Download raw file** (l'icône ⤓ en haut à droite). Sur un `.rbxmx` un
+> peu gros, GitHub dit « too big to display » et ne montre que ce bouton —
+> c'est normal et c'est le bon.
 
 | Fichier | Ce que c'est |
 | --- | --- |
@@ -35,7 +42,8 @@ navigateur et le rig marche.
 
 > Et va voir **[`examples/demo/`](../examples/demo/)** : la cinématique
 > complète, et la même marche composée à la main puis captée en studio, pour
-> comparer.
+> comparer. Là aussi chaque page a son `.rbxmx` à côté, importable de la même
+> façon qu'à l'étape 2.
 
 Pas de serveur, pas d'installation, pas de compte : la page contient
 l'animation. Elle marche hors-ligne, tu peux l'envoyer à quelqu'un par mail.

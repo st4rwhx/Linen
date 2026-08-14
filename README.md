@@ -4,9 +4,10 @@ Des animations Roblox **R15 / R6** à partir de FreeMoCap — et à partir d'un
 prompt texte, sans coût d'API.
 
 > **Rien à installer pour voir ce que ça donne :**
-> **[`examples/demo/`](examples/demo/)** — quatre pages à double-cliquer. La
-> cinématique complète avec la caméra du réalisateur, et la comparaison
-> vocabulaire de poses ↔ vraie mocap, côte à côte.
+> **[`examples/demo/`](examples/demo/)** — quatre démos, chacune en paire : une
+> page à double-cliquer, et le `.rbxmx` du même mouvement à importer dans
+> Studio. La cinématique complète avec la caméra du réalisateur, et la
+> comparaison vocabulaire de poses ↔ vraie mocap, côte à côte.
 >
 > **Tu débutes sur le projet ?** Commence par
 > **[`docs/DEMARRAGE.md`](docs/DEMARRAGE.md)** : sept animations déjà générées,

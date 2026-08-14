@@ -113,6 +113,16 @@ def test_a_nonsense_duration_is_rejected(monkeypatch, tmp_path, capsys):
     assert "expects seconds or 'auto'" in capsys.readouterr().err
 
 
+def test_name_overrides_what_studio_will_call_the_animation(monkeypatch, tmp_path):
+    # The published asset takes this name, so a whole sentence makes a poor one.
+    _no_models(monkeypatch)
+    out = tmp_path / "a.rbxmx"
+    main(
+        ["prompt", "il marche puis il salue", "--planner", "offline", "--name", "Ronde", "-o", str(out)]
+    )
+    assert '<string name="Name">Ronde</string>' in out.read_text()
+
+
 def test_motion_loop_marks_the_clip_as_looping(monkeypatch, tmp_path):
     _no_models(monkeypatch)
     out = tmp_path / "loop.rbxmx"
