@@ -245,14 +245,36 @@ lui-même. Les ratios survivent ; les valeurs absolues non.
 | Prompt FR → vrai clip mocap → `.rbxmx` + `.html` | **Fait et testé** |
 | Le prompt compose plusieurs clips à la suite | **Fait et testé** |
 | Raccords par inertialisation + choix du point d'entrée | **Fait et testé** |
-| Découper une prise longue au bon endroit | **Pas encore** — `--duration` coupe au début |
+| Découper une prise longue au bon endroit | **Fait et testé** — voir ci-dessous |
 | Modèle génératif embarqué | **Non**, et la licence l'interdit pour ton jeu |
 
-Ce qui manque le plus :
+### Le découpage
 
-**Le découpage.** Les prises CMU durent parfois 40 secondes et contiennent
-plusieurs actions. Trouver *quelle* portion répond au prompt est un autre
-problème que trouver la prise ; `--duration` coupe au début.
+Les prises CMU durent vingt à quarante secondes : l'acteur entre dans le champ,
+fait la chose deux ou trois fois, puis attend qu'on arrête l'enregistrement.
+Rendre les deux premières secondes — ce que fait une coupe naïve — rend
+précisément les deux secondes où il ne se passe rien.
+
+Chaque fenêtre candidate est donc **mesurée par le code qui a mesuré la prise
+entière**, puis notée comme la recherche note un clip : est-ce que ses chiffres
+répondent aux adverbes du prompt ? C'est ce qui fait que « il saute haut » sort
+la fenêtre où les pieds décollent, et pas celle où l'acteur se replace.
+
+Deux détails, tous les deux appris en cassant quelque chose :
+
+- **Le sol reste celui de la prise entière.** Une fenêtre qui se trouve
+  entièrement en l'air n'a pas le droit à sa propre idée du sol : sinon elle se
+  déclare posée, et c'est l'inverse de la vérité.
+- **Le raccord fait partie du choix.** Placer la fenêtre sur le seul contenu
+  donne la bonne action, commencée en plein milieu d'une foulée : mesuré sur
+  CMU, ça a transformé un raccord à 3,5 °/image en **35 °/image**, c'est-à-dire
+  un à-coup visible. La pose sur laquelle la fenêtre va être recousue compte
+  donc dans la note — sans jamais pouvoir écraser le prompt, parce que la
+  phrase demandée passe avant la couture.
+
+Quand le prompt ne contient aucun adverbe, il n'y a rien à comparer : la
+fenêtre retenue est simplement la plus active. C'est une heuristique faible, et
+elle bat quand même l'ouverture.
 
 ---
 

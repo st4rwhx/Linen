@@ -71,15 +71,20 @@ linen prompt "il court vite puis il marche et il donne un coup de poing" \
      -o examples/demo/Mocap_CMU_enchainee.rbxmx
 ```
 
-Les raccords sont à **1,45 s** et **3,05 s**. Va les regarder image par image :
-tu ne devrais pas les voir. Mesurés à 3,5 et 4,8 °/image, contre 3,4 °/image
+Les raccords sont à **1,45 s** et **3,46 s**. Va les regarder image par image :
+tu ne devrais pas les voir. Mesurés à 3,4 et 5,1 °/image, contre 3,4 °/image
 pour le mouvement ordinaire de ces clips — un raccord au niveau du bruit de
 fond.
+
+Les trois prises font 1,4 s, 2,9 s et **15,4 s**. Ce ne sont pas leurs deux
+premières secondes qui sont reprises, mais la fenêtre que Linen a choisie dans
+chacune : celle qui répond au temps de la phrase *et* qui enchaîne le mieux sur
+ce qui précède.
 
 Le raisonnement complet est dans
 [`docs/ANIMATIONS_DE_FOU.md`](../../docs/ANIMATIONS_DE_FOU.md).
 
-> C'est un fichier de 6,8 Mo : 506 images-clés à 120 Hz, la cadence de la
+> C'est un fichier de 7,3 Mo : 544 images-clés à 120 Hz, la cadence de la
 > captation d'origine. L'import dans Studio prend quelques secondes.
 
 ### `Cinematique_Disarm/` — la scène complète

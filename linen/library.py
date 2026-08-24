@@ -245,7 +245,32 @@ def _index_one(
     return entry
 
 
-def _measure_world(entry: Entry, track) -> None:
+@dataclass
+class _World:
+    """Per-frame ground truth from the capture, before the root is locked.
+
+    Held as arrays rather than folded straight into an :class:`Entry` so the
+    same pass can answer both questions: what the whole take does, and what any
+    stretch of it does. Scoring a window by re-deriving it from scratch is
+    quadratic in the number of windows, and a CMU take has hundreds.
+    """
+
+    #: Frames per second of the capture these came from.
+    fps: float
+    #: The subject's own hip height, the unit everything else is divided by.
+    scale: float
+    #: Hip height per frame.
+    hips: np.ndarray
+    #: The lower of the two ankles, per frame.
+    lower: np.ndarray
+    #: Hip centre on the ground plane, per frame.
+    centre: np.ndarray
+
+    def __len__(self) -> int:
+        return len(self.hips)
+
+
+def _world_series(track) -> _World | None:
     """Facts that only exist before the root is locked.
 
     The export is rotation-only, so a retargeted clip has a pelvis nailed in
@@ -260,7 +285,7 @@ def _measure_world(entry: Entry, track) -> None:
     """
     names = {name: index for index, name in enumerate(track.names)}
     if not {"left_ankle", "right_ankle", "left_hip", "right_hip"} <= set(names):
-        return
+        return None
 
     positions = np.asarray(track.positions, dtype=float)
     hips = np.nanmean(
@@ -268,23 +293,52 @@ def _measure_world(entry: Entry, track) -> None:
     )
     ankles = positions[:, [names["left_ankle"], names["right_ankle"]], 1]
     if not np.isfinite(hips).any() or not np.isfinite(ankles).any():
-        return
+        return None
 
     scale = float(np.nanmedian(hips))
     if not np.isfinite(scale) or abs(scale) < 1e-6:
-        return
-
-    lower = np.nanmin(ankles, axis=1)
-    ground = float(np.nanpercentile(lower, 5))
-    lift = 0.08 * abs(scale)
-
-    entry.airborne = bool(int(np.nansum(lower - ground > lift)) > 2)
-    entry.bob = round(float(np.nanmax(hips) - np.nanmin(hips)) / abs(scale), 3)
+        return None
 
     ground_plane = positions[:, [names["left_hip"], names["right_hip"]], :][:, :, [0, 2]]
-    centre = np.nanmean(ground_plane, axis=1)
+    return _World(
+        fps=float(getattr(track, "fps", 0.0)) or 30.0,
+        scale=abs(scale),
+        hips=hips,
+        lower=np.nanmin(ankles, axis=1),
+        centre=np.nanmean(ground_plane, axis=1),
+    )
+
+
+def _fill_world(entry: Entry, world: _World, lo: int = 0, hi: int | None = None) -> None:
+    """Write the world-space measurements of ``world[lo:hi]`` onto an entry.
+
+    The ground reference stays the whole take's, not the window's: a window
+    that happens to sit entirely in the air is airborne, and asking it to
+    supply its own floor would say the opposite.
+    """
+    hi = len(world) if hi is None else hi
+    hips = world.hips[lo:hi]
+    lower = world.lower[lo:hi]
+    centre = world.centre[lo:hi]
+    if len(hips) < 2:
+        return
+
+    ground = float(np.nanpercentile(world.lower, 5))
+    lift = 0.08 * world.scale
+    # ``frames - 1`` intervals, not ``frames``: the same span the clip reports
+    # as its duration, so a full-take window measures identically to the index.
+    seconds = max((hi - lo - 1) / world.fps, 1e-6)
+
+    entry.airborne = bool(int(np.nansum(lower - ground > lift)) > 2)
+    entry.bob = round(float(np.nanmax(hips) - np.nanmin(hips)) / world.scale, 3)
     travelled = float(np.nansum(np.linalg.norm(np.diff(centre, axis=0), axis=1)))
-    entry.travel = round(travelled / abs(scale) / max(entry.duration, 1e-6), 3)
+    entry.travel = round(travelled / world.scale / seconds, 3)
+
+
+def _measure_world(entry: Entry, track) -> None:
+    world = _world_series(track)
+    if world is not None:
+        _fill_world(entry, world)
 
 
 def _readable(stem: str) -> str:
@@ -298,17 +352,31 @@ def _readable(stem: str) -> str:
 MEASURE_STRIDE = 4
 
 
-def _measure(entry: Entry, clip) -> None:
-    """What the clip actually does, from forward kinematics.
+@dataclass
+class _Posed:
+    """Per-sample geometry from forward kinematics, sampled at the stride."""
 
-    Descriptions lie by omission: six CMU clips are all called "run" and they
-    are not the same run. These numbers are what tells them apart, and what
-    lets "cours lentement" avoid the fastest one.
-    """
+    #: Samples per second — the clip's rate divided by the stride.
+    rate: float
+    #: Standing height of the rig, the unit reach is divided by.
+    height: float
+    #: Bottom of each sole, per sample.
+    soles: dict[str, np.ndarray]
+    #: Furthest either hand gets in front of the chest, per sample.
+    reaches: np.ndarray
+    #: Where the chest points, per sample.
+    facings: np.ndarray
+
+    def __len__(self) -> int:
+        return len(self.facings)
+
+
+def _posed_series(clip) -> _Posed | None:
+    """Run forward kinematics once and keep what the measurements need."""
     rig = clip.rig
-    frames = range(0, clip.frame_count, MEASURE_STRIDE)
-    if len(list(frames)) < 2:
-        return
+    frames = list(range(0, clip.frame_count, MEASURE_STRIDE))
+    if len(frames) < 2:
+        return None
 
     soles: dict[str, list[np.ndarray]] = {}
     reaches: list[float] = []
@@ -329,42 +397,79 @@ def _measure(entry: Entry, clip) -> None:
             soles.setdefault(part, []).append(
                 position + rotation @ np.array([0.0, -half, 0.0])
             )
-        if core in placed:
-            chest, chest_rotation = placed[core]
-            facings.append(chest_rotation @ np.array([0.0, 0.0, -1.0]))
-            for hand in ("LeftHand", "RightHand"):
-                if hand in placed:
-                    reaches.append(float((placed[hand][0] - chest) @ (chest_rotation @ np.array([0.0, 0.0, -1.0]))))
+        if core not in placed:
+            continue
+        chest, chest_rotation = placed[core]
+        facing = chest_rotation @ np.array([0.0, 0.0, -1.0])
+        facings.append(facing)
+        hands = [
+            float((placed[hand][0] - chest) @ facing)
+            for hand in ("LeftHand", "RightHand")
+            if hand in placed
+        ]
+        reaches.append(max(hands) if hands else 0.0)
 
-    rate = clip.fps / MEASURE_STRIDE
-    height = _standing_height(rig)
+    if not facings:
+        return None
+    return _Posed(
+        rate=clip.fps / MEASURE_STRIDE,
+        height=_standing_height(rig),
+        soles={part: np.array(values) for part, values in soles.items()},
+        reaches=np.array(reaches),
+        facings=np.array(facings),
+    )
 
-    if soles:
+
+def _fill_posed(entry: Entry, posed: _Posed, lo: int = 0, hi: int | None = None) -> None:
+    """Write the forward-kinematics measurements of ``posed[lo:hi]``."""
+    hi = len(posed) if hi is None else hi
+    if hi - lo < 2:
+        return
+    seconds = max((hi - lo - 1) / posed.rate, 1e-6)
+
+    if posed.soles:
         # The ground reference is the *stance* level, not the lowest point the
         # clip ever reaches. Taking the minimum over a forty-second take puts
         # the floor under a crouch, after which both feet read as airborne for
         # the whole clip and every take is a jump. The median of the per-frame
-        # lower sole is where the character actually stands.
-        stacked = {part: np.array(values) for part, values in soles.items()}
-        lower = np.minimum.reduce([values[:, 1] for values in stacked.values()])
+        # lower sole is where the character actually stands. It is taken over
+        # the whole take even when measuring a window, for the same reason: a
+        # window is not entitled to its own idea of where the floor is.
+        lower = np.minimum.reduce([values[:, 1] for values in posed.soles.values()])
         stance = float(np.median(lower))
-        lift = 0.07 * height  # studs a sole must clear to count as off the floor
+        lift = 0.07 * posed.height  # studs a sole must clear to be off the floor
 
         steps = 0
         speeds = []
-        for part, values in stacked.items():
-            speeds.append(float(np.linalg.norm(np.diff(values, axis=0), axis=1).mean() * rate))
-            steps += len(_touchdowns(values[:, 1] - stance, plant=lift, clearance=lift))
+        for values in posed.soles.values():
+            span = values[lo:hi]
+            speeds.append(
+                float(np.linalg.norm(np.diff(span, axis=0), axis=1).mean() * posed.rate)
+            )
+            steps += len(_touchdowns(span[:, 1] - stance, plant=lift, clearance=lift))
 
-        entry.steps_per_second = round(steps / max(clip.duration, 1e-6), 3)
+        entry.steps_per_second = round(steps / seconds, 3)
         entry.foot_speed = round(float(np.mean(speeds)), 3)
 
-    if reaches:
-        entry.reach = round(float(max(reaches)) / height, 3)
+    span = posed.reaches[lo:hi]
+    if len(span):
+        entry.reach = round(float(span.max()) / posed.height, 3)
+    facings = posed.facings[lo:hi]
     if len(facings) > 1:
-        start, stop = facings[0], facings[-1]
-        cosine = float(np.clip(np.dot(start, stop), -1.0, 1.0))
+        cosine = float(np.clip(np.dot(facings[0], facings[-1]), -1.0, 1.0))
         entry.turn = round(float(np.degrees(math.acos(cosine))), 1)
+
+
+def _measure(entry: Entry, clip) -> None:
+    """What the clip actually does, from forward kinematics.
+
+    Descriptions lie by omission: six CMU clips are all called "run" and they
+    are not the same run. These numbers are what tells them apart, and what
+    lets "cours lentement" avoid the fastest one.
+    """
+    posed = _posed_series(clip)
+    if posed is not None:
+        _fill_posed(entry, posed)
 
 
 def _standing_height(rig) -> float:
@@ -651,6 +756,129 @@ def _shape_score(entry: Entry, shape: _Shape) -> float:
     if shape.turn is not None:
         checks.append(float(np.clip(entry.turn / 90.0, 0.0, 1.0)))
     return float(np.mean(checks)) if checks else 0.0
+
+
+#: How far apart candidate windows start, in seconds. Fine enough to land on
+#: the right beat of a take, coarse enough that a forty-second capture is a
+#: few hundred candidates rather than a few thousand.
+WINDOW_STEP = 0.25
+
+#: Weight of the prompt's adverbs against plain activity when placing a
+#: window. Activity never disappears entirely: a stretch that matches the
+#: adverbs while the actor stands around resetting between takes is not the
+#: answer to anything.
+WINDOW_SHAPE_WEIGHT = 0.7
+
+#: Weight of the join against everything else, when the window has something
+#: to follow. Placing a window purely on content picks the right beat and then
+#: enters it mid-stride: measured on CMU, choosing the walk window with no
+#: regard for what preceded it turned a 3.5 deg/frame seam into 35. The join
+#: has to be part of the choice, not a repair applied afterwards.
+WINDOW_JOIN_WEIGHT = 0.4
+
+
+def best_window(
+    clip,
+    track,
+    prompt: str,
+    seconds: float,
+    *,
+    follows: dict | None = None,
+) -> tuple[int, int]:
+    """Which stretch of a long take answers ``prompt``. Frame indices, half-open.
+
+    A CMU take runs twenty to forty seconds and contains several actions, plus
+    the actor walking into place at the top and standing around at the end.
+    Handing back the opening — which is what a plain trim does — reliably
+    returns the least interesting part of the file, and for a take that opens
+    on a calibration pose it returns nothing at all.
+
+    So every candidate window is measured with the same code that measured the
+    whole take, and scored the same way search scores a clip: how well its
+    numbers answer the adverbs in the prompt. When the prompt carries no
+    adverbs there is nothing to match, and the fallback is simply the busiest
+    stretch — which still beats the opening.
+
+    ``follows`` is the pose this window will be joined onto, when it is not the
+    first in a sequence. Two windows can answer a prompt equally well and be
+    worlds apart as a continuation of what came before, so where it is known,
+    it counts.
+    """
+    frames = clip.frame_count
+    want = max(round(seconds * clip.fps) + 1, 2)
+    if want >= frames:
+        return 0, frames
+
+    posed = _posed_series(clip)
+    world = _world_series(track)
+    if posed is None:
+        return 0, want
+
+    shape = _shape_target(prompt)
+    has_shape = any(
+        getattr(shape, field_name) is not None
+        for field_name in ("pace", "reach", "airborne", "turn")
+    )
+
+    step = max(round(WINDOW_STEP * clip.fps), 1)
+    starts = list(range(0, frames - want + 1, step))
+
+    joins = _join_quality(clip, starts, follows)
+
+    scored: list[tuple[float, float, float, int]] = []
+    for index, start in enumerate(starts):
+        probe = Entry(path="", name="", description="", duration=seconds,
+                      fps=clip.fps, frames=want)
+        _fill_posed(probe, posed, start // MEASURE_STRIDE, (start + want) // MEASURE_STRIDE)
+        if world is not None:
+            _fill_world(probe, world, start, start + want)
+        scored.append(
+            (
+                _shape_score(probe, shape) if has_shape else 0.0,
+                probe.foot_speed,
+                joins[index],
+                start,
+            )
+        )
+
+    busiest = max((activity for _, activity, _, _ in scored), default=0.0) or 1.0
+
+    def rank(candidate: tuple[float, float, float, int]) -> float:
+        shape_score, activity, join, _ = candidate
+        normalised = min(activity / busiest, 1.0)
+        content = (
+            WINDOW_SHAPE_WEIGHT * shape_score + (1.0 - WINDOW_SHAPE_WEIGHT) * normalised
+            if has_shape
+            else normalised
+        )
+        if not follows:
+            return content
+        return (1.0 - WINDOW_JOIN_WEIGHT) * content + WINDOW_JOIN_WEIGHT * join
+
+    start = max(scored, key=rank)[3]
+    return start, start + want
+
+
+def _join_quality(clip, starts: list[int], follows: dict | None) -> list[float]:
+    """0..1 per candidate start: how well it continues the pose before it.
+
+    Relative rather than absolute — the best available start scores 1 and the
+    worst 0 — because what matters is which of *these* windows joins best, not
+    how the number compares against some other take.
+    """
+    if not follows:
+        return [0.0] * len(starts)
+
+    from .transitions import pose_distance
+
+    distances = [
+        pose_distance(follows, {part: track[start] for part, track in clip.rotations.items()})
+        for start in starts
+    ]
+    worst, best = max(distances), min(distances)
+    if worst - best < 1e-9:
+        return [1.0] * len(starts)
+    return [float((worst - value) / (worst - best)) for value in distances]
 
 
 def describe(entry: Entry) -> str:

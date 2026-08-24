@@ -466,7 +466,7 @@ def _prompt_from_library(args) -> int:
     does not show. "Il court, il s'arrete, il frappe" is three retrievals.
     """
     from .generate.offline import _split_clauses
-    from .library import Library, describe
+    from .library import Library, best_window, describe
     from .retarget import SolveOptions, solve_clip
     from .sources import load_bvh
     from .transitions import chain, seam_error
@@ -485,7 +485,7 @@ def _prompt_from_library(args) -> int:
               f"[{describe(entry)}]  score {score:.2f}")
         for other_score, other in hits[1:3]:
             print(f"     sinon: {other.name:12} {other.description[:40]:42} {other_score:.2f}")
-        chosen.append(entry)
+        chosen.append((clause, entry))
 
     if not chosen:
         raise ValueError(
@@ -502,7 +502,7 @@ def _prompt_from_library(args) -> int:
     written = []
     for rig in _target_rigs(args):
         pieces = []
-        for entry in chosen:
+        for clause, entry in chosen:
             track = load_bvh(library.resolve(entry), skeleton="mixamo", units="cm")
             clip = solve_clip(
                 rig,
@@ -511,7 +511,20 @@ def _prompt_from_library(args) -> int:
                 SolveOptions(root_motion=args.motion == "natural", smoothing_frames=3),
             )
             clip.name = entry.name
-            pieces.append(_trim(clip, share))
+            # What the previous piece ended on: a window that answers the beat
+            # but enters it mid-stride makes a seam nothing downstream can hide.
+            follows = (
+                {part: rotations[-1] for part, rotations in pieces[-1].rotations.items()}
+                if pieces
+                else None
+            )
+            lo, hi = best_window(clip, track, clause, share, follows=follows)
+            if hi - lo < clip.frame_count:
+                print(
+                    f"  {entry.name}: fenetre {lo / clip.fps:.2f}-{hi / clip.fps:.2f}s "
+                    f"sur {clip.duration:.1f}s"
+                )
+            pieces.append(_window(clip, lo, hi))
 
         joined = chain(pieces, name=args.name or args.text[:40])
         for seam in joined.metadata.get("seams", []):
@@ -521,28 +534,25 @@ def _prompt_from_library(args) -> int:
     return _write(written, args)
 
 
-def _trim(clip: AnimationClip, seconds: float | None) -> AnimationClip:
-    """Cut a capture down to the asked-for length.
+def _window(clip: AnimationClip, lo: int, hi: int) -> AnimationClip:
+    """One stretch of a capture, as a clip of its own.
 
-    Takes the opening, which is the honest simple choice: CMU's takes run for
-    tens of seconds and contain several actions, and picking *which* stretch of
-    a long take answers the prompt is a different problem than picking the
-    take. Silently handing back fifteen seconds when two were asked for is the
-    one option that is definitely wrong.
+    Which stretch is :func:`linen.library.best_window`'s decision. This only
+    does the cutting.
     """
-    if seconds is None or seconds <= 0 or clip.duration <= seconds:
+    if lo <= 0 and hi >= clip.frame_count:
         return clip
-    frames = max(round(seconds * clip.fps) + 1, 2)
-    trimmed = AnimationClip(
+    cut = AnimationClip(
         rig=clip.rig,
         fps=clip.fps,
-        rotations={part: track[:frames].copy() for part, track in clip.rotations.items()},
+        rotations={part: track[lo:hi].copy() for part, track in clip.rotations.items()},
         name=clip.name,
         metadata=dict(clip.metadata),
     )
     if clip.root_positions is not None:
-        trimmed.root_positions = clip.root_positions[:frames].copy()
-    return trimmed
+        cut.root_positions = clip.root_positions[lo:hi].copy()
+    return cut
+
 
 def _cmd_synth(args) -> int:
     plan = MotionPlan.from_dict(json.loads(args.plan.read_text()))
