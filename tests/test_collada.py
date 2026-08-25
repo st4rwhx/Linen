@@ -146,9 +146,17 @@ def test_animations_nested_one_level_deep_are_still_found(tmp_path):
     assert read_collada(path).locals.shape[0] == 5
 
 
-def test_a_file_without_the_mixamo_prefix_still_reads(tmp_path):
+@pytest.mark.parametrize("prefix", ["mixamorig:", "mixamorig_", ""])
+def test_both_mixamo_prefixes_are_stripped(tmp_path, prefix):
+    """Which separator Mixamo uses depends on the exporter.
+
+    The FBX side writes ``mixamorig:Hips`` and the Collada side writes
+    ``mixamorig_Hips``. Only the colon was handled, so a real Mixamo Collada
+    export came back with every joint named ``mixamorig_Something`` and the
+    skeleton mapping matched nothing. Found on the first real file.
+    """
     path = tmp_path / "take.dae"
-    write_dae(path, prefix="")
+    write_dae(path, prefix=prefix)
     assert read_collada(path).names == ("Hips", "Spine", "Head")
 
 
@@ -173,7 +181,7 @@ def test_something_that_is_not_xml_at_all_says_so(tmp_path):
         read_collada(path)
 
 
-def _mixamo_dae(path, frames: int = 24, fps: float = 30.0) -> None:
+def _mixamo_dae(path, frames: int = 24, fps: float = 30.0, prefix: str = "mixamorig_") -> None:
     """A full Mixamo-shaped skeleton walking, written by hand.
 
     Twenty-one joints under the ``mixamorig:`` prefix, which is what a Mixamo
@@ -215,7 +223,7 @@ def _mixamo_dae(path, frames: int = 24, fps: float = 30.0) -> None:
     def node(name: str, offset) -> str:
         inner = "".join(node(kid, kid_offset) for kid, kid_offset in kids.get(name, []))
         return (
-            f'<node id="{name}" sid="mixamorig:{name}" type="JOINT">'
+            f'<node id="{name}" sid="{prefix}{name}" type="JOINT">'
             f'<matrix sid="transform">{cell(0.0, offset)}</matrix>{inner}</node>'
         )
 

@@ -29,9 +29,11 @@ import numpy as np
 #: Collada namespaces its elements, and the version varies between exporters.
 _NAMESPACE = re.compile(r"^\{[^}]*\}")
 
-#: Mixamo prefixes every joint with this. Stripped so the existing "mixamo"
+#: Mixamo prefixes every joint with this, and which separator it uses depends
+#: on the exporter: the FBX side writes ``mixamorig:Hips``, the Collada side
+#: writes ``mixamorig_Hips``. Both are stripped, so the existing "mixamo"
 #: skeleton mapping matches without a second set of names to maintain.
-_MIXAMO_PREFIX = "mixamorig:"
+_MIXAMO_PREFIXES = ("mixamorig:", "mixamorig_")
 
 #: Frame rate used when a file's own timing cannot be read. Mixamo's own
 #: default, and the rate everything else in Linen assumes.
@@ -150,7 +152,8 @@ def _walk(
     index = parent
     if node.get("type") == "JOINT":
         name = node.get("sid") or node.get("name") or node.get("id") or ""
-        name = name.removeprefix(_MIXAMO_PREFIX)
+        for prefix in _MIXAMO_PREFIXES:
+            name = name.removeprefix(prefix)
         index = len(joints)
         joints.append(name)
         parents.append(parent)
