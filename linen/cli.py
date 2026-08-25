@@ -90,6 +90,15 @@ def _add_common_output(parser: argparse.ArgumentParser) -> None:
         help="skip the standalone .html 3D viewer written next to the .rbxmx",
     )
     parser.add_argument(
+        "--moon",
+        action="store_true",
+        help=(
+            "also write a Moon Animator 2 save next to the .rbxmx, so the "
+            "generated take can be finished by hand in the tool Roblox "
+            "animators actually work in"
+        ),
+    )
+    parser.add_argument(
         "--skin",
         type=Path,
         action="append",
@@ -773,6 +782,16 @@ def _write(clips: list[AnimationClip], args) -> int:
 
             preview = _suffixed(args.preview, clip.rig.name, len(clips) > 1)
             print(f"{write_preview(clip, preview)}: viewport clip")
+
+        if getattr(args, "moon", False):
+            from .export.moon import write_moon
+
+            save = write_moon(
+                clip,
+                out.with_suffix(".moon.rbxmx"),
+                angular_tolerance_deg=max(args.tolerance, 0.0) or 1.0,
+            )
+            print(f"{save}: sauvegarde Moon Animator — glisse-la dans ServerStorage")
 
         if not args.no_viewer:
             from .export import clip_payload, write_viewer

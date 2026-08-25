@@ -17,6 +17,11 @@ prompt texte, sans coût d'API.
 > **[`docs/MODE_EMPLOI.md`](docs/MODE_EMPLOI.md)** : l'installation, chaque
 > commande, ce qu'elle fait vraiment, et où sont les limites.
 >
+> **Tu veux finir l'animation à la main ?**
+> **[`docs/MOON.md`](docs/MOON.md)** : `--moon` écrit une sauvegarde Moon
+> Animator 2 à côté du `.rbxmx`, et la vraie réponse à « est-ce qu'on peut
+> atteindre le niveau AAA ».
+>
 > **Tu veux des animations qui ont l'air capturées ?**
 > **[`docs/ANIMATIONS_DE_FOU.md`](docs/ANIMATIONS_DE_FOU.md)** : pourquoi toute
 > la pile IA text-to-motion est fermée pour un jeu qu'on vend, quelles

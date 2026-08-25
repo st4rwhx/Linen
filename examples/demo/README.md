@@ -87,6 +87,21 @@ Le raisonnement complet est dans
 > C'est un fichier de 7,3 Mo : 544 images-clés à 120 Hz, la cadence de la
 > captation d'origine. L'import dans Studio prend quelques secondes.
 
+### Les `.moon.rbxmx` — la même animation, mais modifiable
+
+À côté de deux des démos il y a un fichier `.moon.rbxmx`. C'est la **même
+animation en sauvegarde Moon Animator 2** : une piste par articulation, des
+images-clés qu'on peut attraper et déplacer.
+
+| Fichier | Ce que c'est |
+| --- | --- |
+| `Posebook_marche.moon.rbxmx` | 155 clés, 15 pistes. **Commence par celle-là** : petite et propre. |
+| `Mocap_CMU_enchainee.moon.rbxmx` | 1339 clés. De la vraie mocap, avec la densité que ça implique. |
+
+Glisse le fichier dans **ServerStorage**, mets un rig R15 dans le Workspace,
+clic droit sur le script `InstallerLinen` → **Run Script**, puis Moon Animator →
+**Load**. Le détail est dans [`docs/MOON.md`](../../docs/MOON.md).
+
 ### `Cinematique_Disarm/` — la scène complète
 
 Six fichiers, parce qu'une cinématique n'est pas une animation : c'est un
