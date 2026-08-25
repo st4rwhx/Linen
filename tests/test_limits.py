@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
-
-from pathlib import Path
 
 from linen.export.luau import rig_limits_module
 from linen.generate.posebook import POSES
 from linen.math3d import euler_degrees_to_quat, quat_multiply, quat_to_mat, swing_twist
 from linen.rigs import R6, R15, get_rig
-from linen.rigs.limits import JointKind, R15_LIMITS, limits_for, validate_all
+from linen.rigs.limits import R15_LIMITS, JointKind, limits_for, validate_all
 
 #: A pose may lean a hinge slightly off its axis without looking wrong, but a
 #: hinge carrying real off-axis rotation is a ball joint in disguise.

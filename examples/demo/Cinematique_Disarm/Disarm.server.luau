@@ -171,7 +171,7 @@ local folder = require_(resolve(FOLDER_PATH), FOLDER_PATH)
 local camera = workspace.CurrentCamera
 
 -- ---------------------------------------------------------------- staging --
-local models: { [string]: Model } = {}
+local models: { [string]: Model? } = {}
 local tracks: { AnimationTrack } = {}
 
 for _, entry in STAGE do
@@ -233,7 +233,7 @@ end
 local function attachProp(name: string, actorName: string)
 	local part = propModel(name)
 	local model = models[actorName]
-	if part == nil or model == nil then
+	if not part or not model then
 		return
 	end
 	for _, prop in PROPS do
@@ -443,7 +443,10 @@ local function cutTo(shotId: string)
 		if shot.id ~= shotId then
 			continue
 		end
-		local target = workspace:FindFirstChild(shot.lookAt, true)
+		-- Only a PVInstance has a pivot, and FindFirstChild hands back any
+		-- Instance: a shot aimed at a Folder or a Sound would crash here.
+		local found = workspace:FindFirstChild(shot.lookAt, true)
+		local target = if found and found:IsA("PVInstance") then found else nil
 		local focus = if target then target:GetPivot().Position else Vector3.zero
 		local goal = CFrame.lookAt(shot.position, focus)
 
@@ -507,7 +510,7 @@ end
 
 for _, entry in STAGE do
 	local model = models[entry.name]
-	if model == nil then
+	if not model then
 		continue
 	end
 	local humanoid = model:FindFirstChildOfClass("Humanoid")

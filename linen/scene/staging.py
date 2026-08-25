@@ -281,7 +281,7 @@ def blockout(plan: SetPlan) -> str:
     """
     from xml.etree import ElementTree as ET
 
-    from ..export.rbxmx import _ROBLOX_ATTRS, _Referents, _bool, _string
+    from ..export.rbxmx import _ROBLOX_ATTRS, _bool, _Referents, _string
 
     referents = _Referents()
     root = ET.Element("roblox", _ROBLOX_ATTRS)

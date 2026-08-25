@@ -16,8 +16,8 @@ from .audio import (
 from .build import CUE_BLEND, BuiltScene, ScheduledCue, build_scene
 from .director import build_director_prompt, scene_from_prompt
 from .luau import scene_script, write_scene_script
-from .staging import GRAVITY, Placement, SetPlan, blockout, plan_set
 from .schema import Actor, Cue, Scene, SceneError, json_schema
+from .staging import GRAVITY, Placement, SetPlan, blockout, plan_set
 
 __all__ = [
     "CATALOGUE",
@@ -28,19 +28,19 @@ __all__ = [
     "BuiltScene",
     "Cue",
     "Hit",
+    "Placement",
     "Scene",
     "SceneError",
-    "Placement",
     "ScheduledCue",
     "SetPlan",
     "SoundSlot",
     "SpottingSheet",
     "apply_spotting",
     "blockout",
-    "plan_set",
     "build_director_prompt",
     "build_scene",
     "json_schema",
+    "plan_set",
     "read_mapping",
     "scene_from_prompt",
     "scene_script",

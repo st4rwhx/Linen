@@ -4,8 +4,8 @@ import json
 
 import numpy as np
 import pytest
-
 from conftest import REST_LANDMARKS
+
 from linen.cli import main
 from linen.retarget.landmarks import MEDIAPIPE_POSE
 

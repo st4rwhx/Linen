@@ -74,21 +74,21 @@ class AnimationClip:
         return np.arange(self.frame_count) / self.fps
 
     @classmethod
-    def rest(cls, rig: RigDefinition, frames: int, fps: float = 30.0, **kwargs) -> "AnimationClip":
+    def rest(cls, rig: RigDefinition, frames: int, fps: float = 30.0, **kwargs) -> AnimationClip:
         """A clip holding the rig's rest pose, useful as a base to layer onto."""
         rotations = {
             part: np.tile(IDENTITY_QUAT, (frames, 1)) for part in rig.animated_parts
         }
         return cls(rig=rig, fps=fps, rotations=rotations, **kwargs)
 
-    def resampled(self, fps: float) -> "AnimationClip":
+    def resampled(self, fps: float) -> AnimationClip:
         """Resample to a new frame rate, slerping rotations."""
         if fps <= 0:
             raise ValueError(f"fps must be positive, got {fps}")
         if np.isclose(fps, self.fps) or self.frame_count < 2:
             return self
 
-        new_count = max(int(round(self.duration * fps)) + 1, 1)
+        new_count = max(round(self.duration * fps) + 1, 1)
         source = np.linspace(0.0, self.frame_count - 1, new_count)
         lo = np.floor(source).astype(int)
         hi = np.minimum(lo + 1, self.frame_count - 1)
@@ -117,7 +117,7 @@ class AnimationClip:
             metadata=dict(self.metadata),
         )
 
-    def sliced(self, start: int, stop: int) -> "AnimationClip":
+    def sliced(self, start: int, stop: int) -> AnimationClip:
         return AnimationClip(
             rig=self.rig,
             fps=self.fps,
@@ -131,7 +131,7 @@ class AnimationClip:
             metadata=dict(self.metadata),
         )
 
-    def with_loop_seam(self, blend_frames: int = 6) -> "AnimationClip":
+    def with_loop_seam(self, blend_frames: int = 6) -> AnimationClip:
         """Cross-fade the tail into the head so the clip loops without a pop.
 
         The last ``blend_frames`` frames are blended towards the first frame,

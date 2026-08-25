@@ -13,6 +13,7 @@ fallback to rest would look like a bug in the exporter three stages later.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -130,7 +131,7 @@ class MotionPlan:
             layer.validate()
 
         ordered = sorted(self.segments, key=lambda s: s.start)
-        for previous, current in zip(ordered, ordered[1:]):
+        for previous, current in itertools.pairwise(ordered):
             if current.start < previous.end - 1e-6:
                 raise PlanError(
                     f"segments overlap: one ends at {previous.end}, "
@@ -149,11 +150,11 @@ class MotionPlan:
 
     @property
     def frame_count(self) -> int:
-        return max(int(round(self.duration * self.fps)) + 1, 1)
+        return max(round(self.duration * self.fps) + 1, 1)
 
     # -- serialisation ----------------------------------------------------
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "MotionPlan":
+    def from_dict(cls, data: dict[str, Any]) -> MotionPlan:
         if not isinstance(data, dict):
             raise PlanError(f"expected a JSON object, got {type(data).__name__}")
         unknown = set(data) - {

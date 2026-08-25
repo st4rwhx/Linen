@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -507,7 +508,7 @@ def test_every_expression_blend_uses_a_pose_faceControls_actually_has():
     way — NoseWrinkler for LeftNoseWrinkler, LipPressor for LipPresser,
     LipStretcher for LeftLipStretcher, LipCornerDepressor for LipCornerDown.
     """
-    from linen.scene.luau import FACS_POSES, _FACS
+    from linen.scene.luau import _FACS, FACS_POSES
 
     for expression, blend in _FACS.items():
         unknown = set(blend) - FACS_POSES
@@ -533,3 +534,35 @@ def test_neutral_clears_rather_than_poses():
     from linen.scene.luau import _FACS
 
     assert _FACS["neutral"] == {}, "neutral must reset, not add"
+
+
+# --- strict-mode defects in the generated player -----------------------------
+
+
+def _player_source(tmp_path) -> str:
+    from linen.scene import Scene, build_scene, write_scene_script
+
+    scene = Scene.from_dict(json.loads(Path("examples/disarm.scene.json").read_text()))
+    built = build_scene(scene, planner="offline", seed=0)
+    return write_scene_script(built, tmp_path / "Scene.server.luau").read_text()
+
+
+def test_the_actor_lookup_admits_a_missing_actor(tmp_path):
+    """``{[string]: Model}`` makes every ``model == nil`` guard a type error.
+
+    The map is filled per staged actor and read for actors that may not be
+    there, so its values are optional — and the guards around it were right all
+    along.
+    """
+    source = _player_source(tmp_path)
+    assert "local models: { [string]: Model? } = {}" in source
+    assert "if model == nil then" not in source
+
+
+def test_a_camera_target_is_checked_for_having_a_pivot(tmp_path):
+    """``FindFirstChild`` hands back any Instance, and only a PVInstance has one.
+
+    A shot aimed at a Folder or a Sound would have crashed the whole player.
+    """
+    source = _player_source(tmp_path)
+    assert 'found:IsA("PVInstance")' in source

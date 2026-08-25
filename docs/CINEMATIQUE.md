@@ -243,8 +243,8 @@ de l'union `"ball" | "hinge" | "fixed"`.
 « Ça compile » n'est pas « ça marche ». Mais « ça ne compile pas » aurait été
 découvert au pire moment.
 
-> Les modules de `runtime/` (ragdoll, équilibre, appuis, inertie) compilent aussi,
-> mais `luau-analyze` y signale une quarantaine d'erreurs de type restantes. La
-> majorité vient de l'absence des types Roblox hors Studio — l'arithmétique
-> `Vector3` devient `unknown` — mais pas toutes. Elles sont antérieures à cette
-> passe et pas encore triées.
+> Les modules de `runtime/` (ragdoll, équilibre, appuis, inertie) passent aussi,
+> et cette fois pour de bon : **zéro erreur de type**, en mode strict, avec les
+> définitions de l'API Roblox chargées et les `require` entre modules résolus.
+> Sans ces définitions l'outil signalait 216 erreurs — presque toutes de
+> l'arithmétique `Vector3` devenue `unknown`. Les vraies étaient **deux**.

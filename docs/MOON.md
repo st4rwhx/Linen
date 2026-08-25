@@ -125,7 +125,8 @@ supposés ne serait pas.
 
 **Rien de tout ça n'a tourné dans Roblox Studio.** Ce qui est vérifié ici :
 
-- le Luau généré **compile** (compilateur Luau officiel, `luau-compile`) ;
+- le Luau généré **compile et passe le typage strict** — compilateur Luau
+  officiel, puis `luau-lsp` avec les définitions de l'API Roblox chargées ;
 - la structure du `.rbxmx` et le contenu des deux scripts (18 tests) ;
 - l'algèbre `c1 → Transform` en aller-retour sur des rotations aléatoires.
 

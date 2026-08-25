@@ -192,7 +192,7 @@ class Scene:
 
     # -- serialisation ----------------------------------------------------
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Scene":
+    def from_dict(cls, data: dict[str, Any]) -> Scene:
         if not isinstance(data, dict):
             raise SceneError(f"expected a JSON object, got {type(data).__name__}")
         unknown = set(data) - {

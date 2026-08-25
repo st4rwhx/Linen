@@ -119,4 +119,4 @@ def _coerce(raw: dict[str, Any], fps: float) -> dict[str, Any]:
     return raw
 
 
-__all__ = ["build_director_prompt", "scene_from_prompt", "build_system_prompt"]
+__all__ = ["build_director_prompt", "build_system_prompt", "scene_from_prompt"]

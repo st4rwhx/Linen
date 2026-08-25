@@ -222,6 +222,27 @@ synthétiques où le glissement est connu d'avance par géométrie) et
 **visuellement** dans le visualiseur. Elles n'ont pas été jouées dans Roblox
 Studio.
 
+Le Luau, lui, est vérifié aussi loin qu'on peut le faire hors Studio :
+`runtime/` et tout le Luau généré (lecteur de scène, module et installeur Moon)
+compilent avec le compilateur officiel **et passent le typage strict** avec les
+définitions de l'API Roblox chargées. Zéro erreur. Sans ces définitions l'outil
+en signalait 216 dans `runtime/` et 292 dans le généré — presque toutes de
+l'arithmétique `Vector3` devenue `unknown`. Les vraies étaient **huit**, et
+elles sont corrigées :
+
+| Où | Le défaut |
+| --- | --- |
+| `runtime/init.luau` | `options or {}` s'infère en `Options \| {}`, et une table vide n'a aucun champ à lire |
+| `runtime/init.luau`, `Secondary.luau` | un littéral avec `head = nil` donne au champ le type `nil` — le `Motor6D` qu'on y écrit ensuite est une erreur contre du code correct |
+| module Moon | `{frame, {12 nombres}}` s'infère comme le type de son **premier** élément : 285 erreurs, une par clé. Les champs sont nommés maintenant |
+| installeur Moon | `{[string]: Motor6D}` rend `motor == nil` illégal — la table admet désormais l'absence, ce que les gardes supposaient déjà |
+| installeur Moon | `script.Parent` est `Instance?` et était lu au travers |
+| lecteur de scène | `{[string]: Model}`, même défaut, deux fois |
+| lecteur de scène | `:GetPivot()` appelé sur ce que `FindFirstChild` rend : **un plan visant un Folder plantait tout le lecteur** |
+
+La dernière ligne est la seule qui aurait crashé en jeu. Les autres étaient des
+annotations qui accusaient du code juste — mais elles noyaient celle-là.
+
 ---
 
 ## Sources

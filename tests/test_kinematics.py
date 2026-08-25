@@ -8,7 +8,6 @@ from linen.generate.stride import all_strides, cycle_stride, locomotion_strides
 from linen.rigs import R15, get_rig
 from linen.rigs.kinematics import forward_kinematics, sole_positions, step_length
 
-
 # --- forward kinematics ----------------------------------------------------
 #: Measured from Roblox's own ClassicMannequin.fbx with
 #: tools/read_fbx_skeleton.py. The rig is built from these, so they are the

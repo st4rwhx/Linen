@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from conftest import make_track
+
 from linen.math3d import euler_degrees_to_quat, quat_angle
 from linen.retarget import LandmarkTrack, SolveOptions, solve_clip
 from linen.retarget.landmarks import MEDIAPIPE_POSE

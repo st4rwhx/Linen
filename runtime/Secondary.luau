@@ -136,7 +136,10 @@ function Secondary.new(character: Model, config: Config?): Secondary?
 		end
 	end
 
-	local self = setmetatable({
+	-- Annotated, not inferred: `head = nil` in the literal makes the field's
+	-- type `nil`, and the Motor6D assigned to it below is then an error
+	-- against code that is correct. The declared type has it as `Motor6D?`.
+	local self: Secondary = setmetatable({
 		character = character,
 		rigName = rigName,
 		config = merged,

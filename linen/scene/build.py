@@ -8,6 +8,7 @@ One track per actor, all started together at t=0, cannot drift.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -93,8 +94,8 @@ def _place_events(scene: Scene, schedule: list[ScheduledCue]):
             director.append((round(when, 4), event))
             continue
 
-        frame = int(round(when * scene.fps))
-        clip_frames = max(int(round(max(e.end for e in schedule) * scene.fps)) + 1, 1)
+        frame = round(when * scene.fps)
+        clip_frames = max(round(max(e.end for e in schedule) * scene.fps) + 1, 1)
         if not 0 <= frame < clip_frames:
             raise SceneError(
                 f"{event.kind} event on cue {event.cue!r} fires at {when:.2f}s, "
@@ -201,7 +202,7 @@ def _reject_overlaps(schedule: list[ScheduledCue]) -> None:
         by_actor.setdefault(entry.cue.actor, []).append(entry)
 
     for actor, entries in by_actor.items():
-        for previous, current in zip(entries, entries[1:]):
+        for previous, current in itertools.pairwise(entries):
             if current.start < previous.end - 1e-6:
                 raise SceneError(
                     f"{actor} is double-booked: {previous.cue.id!r} runs to "
@@ -213,8 +214,8 @@ def _reject_overlaps(schedule: list[ScheduledCue]) -> None:
 
 def _splice(scene: Scene, schedule: list[ScheduledCue], seed: int) -> dict[str, AnimationClip]:
     total = max((entry.end for entry in schedule), default=0.0)
-    frames = max(int(round(total * scene.fps)) + 1, 1)
-    blend_frames = max(int(round(CUE_BLEND * scene.fps)), 1)
+    frames = max(round(total * scene.fps) + 1, 1)
+    blend_frames = max(round(CUE_BLEND * scene.fps), 1)
 
     clips: dict[str, AnimationClip] = {}
     for actor in scene.actors:
@@ -225,7 +226,7 @@ def _splice(scene: Scene, schedule: list[ScheduledCue], seed: int) -> dict[str, 
 
         for entry in (e for e in schedule if e.cue.actor == actor.name):
             cue_clip = synthesize(entry.plan, rig, seed=seed)
-            offset = int(round(entry.start * scene.fps))
+            offset = round(entry.start * scene.fps)
             length = min(cue_clip.frame_count, frames - offset)
             if length <= 0:
                 continue

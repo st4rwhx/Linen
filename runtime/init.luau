@@ -86,10 +86,15 @@ function Linen.attach(character: Model, options: Options?): Body?
 		return nil
 	end
 
-	local opts = options or {}
+	-- Annotated rather than inferred, both of them. `options or {}` infers as
+	-- `Options | {}`, and an empty table has no fields to read; the literal
+	-- below infers `feet: nil` from `feet = nil` rather than the optional the
+	-- Body type declares. Both make every later access a type error against
+	-- code that is correct.
+	local opts: Options = options or {}
 	local client = RunService:IsClient()
 
-	local self = setmetatable({
+	local self: Body = setmetatable({
 		character = character,
 		rigName = rigName,
 		ragdoll = Ragdoll.new(character),

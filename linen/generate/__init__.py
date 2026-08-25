@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from .choreographer import PLANNERS, build_system_prompt, plan_for_prompt, plan_from_prompt
+from .choreographer import (
+    PLANNERS,
+    build_system_prompt,
+    plan_for_prompt,
+    plan_from_prompt,
+)
 from .offline import ACTIONS, action_names, plan_offline
 from .posebook import CYCLES, POSES, cycle_names, pose_names, resolve_pose
 from .providers import (

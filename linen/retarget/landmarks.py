@@ -115,7 +115,7 @@ class LandmarkTrack:
     def direction(self, origin: tuple[str, ...], tip: tuple[str, ...]) -> np.ndarray:
         return normalize(self.point(*tip) - self.point(*origin))
 
-    def fill_gaps(self, max_gap_frames: int = 30) -> "LandmarkTrack":
+    def fill_gaps(self, max_gap_frames: int = 30) -> LandmarkTrack:
         """Linearly interpolate NaN runs shorter than ``max_gap_frames``.
 
         Longer dropouts are left as NaN on purpose: inventing half a second of
@@ -136,7 +136,7 @@ class LandmarkTrack:
                 column[gap_ok & ~good] = interpolated[gap_ok & ~good]
         return LandmarkTrack(filled, self.fps, self.names)
 
-    def to_roblox_axes(self, convention: str) -> "LandmarkTrack":
+    def to_roblox_axes(self, convention: str) -> LandmarkTrack:
         try:
             rotation = AXIS_CONVENTIONS[convention]
         except KeyError:
@@ -146,7 +146,7 @@ class LandmarkTrack:
             ) from None
         return LandmarkTrack(self.positions @ rotation.T, self.fps, self.names)
 
-    def scaled(self, factor: float) -> "LandmarkTrack":
+    def scaled(self, factor: float) -> LandmarkTrack:
         return LandmarkTrack(self.positions * factor, self.fps, self.names)
 
 

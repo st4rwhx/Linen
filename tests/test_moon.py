@@ -172,3 +172,51 @@ def test_the_installer_writes_that_expression_and_not_its_inverse():
         if element.get("name") == "Source" and "MoonAnimator2Saves" in element.text
     )
     assert "default * transform:Inverse()" in installer
+
+
+# --- strict-mode defects, locked in -----------------------------------------
+#
+# Each of these was a real type error found by running luau-lsp over the
+# generated files with the Roblox API definitions loaded. Without those
+# definitions every Vector3 subtraction also reports as an error, which is what
+# hid them: 292 errors in the generated Luau, of which 6 were real.
+
+
+def test_keys_are_named_rather_than_positional():
+    """A mixed array infers as the type of its first element.
+
+    ``{0, {…12 numbers…}}`` came back as 285 type errors — one per key — because
+    the second entry is not a number. Named fields cost a few bytes and make the
+    installer read as ``key.frame`` instead of ``key[1]``.
+    """
+    source = moon_module(moon_payload(_spin()))
+    assert "export type Key = { frame: number, cframe: { number } }" in source
+    assert "frame = 0, cframe = {" in source
+
+
+def _installer() -> str:
+    tree = build_moon_save(_spin())
+    return next(
+        element.text
+        for element in tree.getroot().iter("ProtectedString")
+        if element.get("name") == "Source" and "MoonAnimator2Saves" in element.text
+    )
+
+
+def test_the_motor_lookup_is_optional_and_guarded_without_comparing():
+    """``{[string]: Motor6D}`` makes ``motor == nil`` itself a type error.
+
+    Strict Luau refuses to compare a non-optional Motor6D against nil, so the
+    map has to admit that a part may be missing — which it is, on any rig that
+    does not have every part Linen animates.
+    """
+    installer = _installer()
+    assert "{ [string]: Motor6D? }" in installer
+    assert "if not motor then" in installer
+    assert "motor == nil" not in installer
+
+
+def test_the_script_asserts_its_own_folder_before_reading_through_it():
+    """``script.Parent`` is ``Instance?``, and this one is run by hand."""
+    installer = _installer()
+    assert "assert(script.Parent" in installer
