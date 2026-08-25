@@ -42,42 +42,101 @@ après.
 
 ---
 
-## Ce qui est mesuré
+## Ce qui est mesuré, et ce qui est corrigé
 
-`--polish` mesure quatre choses, qui sont quatre signatures connues d'animation
-amateur.
+Cinq défauts, tous des signatures connues d'animation amateur. **Les cinq sont
+maintenant corrigés**, chacun avec sa précaution.
 
-**Le patinage des pieds.** En studs, par appui. Voir plus bas pour la
-subtilité, parce qu'elle est réelle.
+| Défaut | Mesure | Correction |
+| --- | --- | --- |
+| **Patinage des pieds** | studs par appui | IK analytique à deux os (R15) ou visée de la jambe (R6) |
+| **Arcs cassés** | degrés de virage sur une fenêtre de 40 ms | remplacement de l'image isolée fautive |
+| **Poses figées** | images où la pose est *identique* | *moving hold* : la pose dépasse un peu et revient |
+| **Articulations à l'envers** | images où un genou passe derrière la ligne hanche-cheville | rapporté (c'est le solveur amont qu'il faut corriger, pas le clip) |
+| **Symétrie parasite** | corrélation du balancement signé | décalage d'une demi-foulée — **sur demande seulement** |
 
-**Les articulations qui plient à l'envers.** Un genou qui passe derrière la
-ligne hanche-cheville, un coude qui passe devant. Pas « un membre tendu » — un
-membre tendu est normal, c'est la position de repos de tout le monde.
+```bash
+linen prompt "..." --library cmu.json --polish            # les quatre corrections sûres
+linen prompt "..." --library cmu.json --polish --desync   # + le décalage de symétrie
+```
 
-**Les poses figées.** Un maintien *parfaitement* immobile lit comme un arrêt
-sur image. Les animateurs appellent le correctif un *moving hold*.
+L'ordre n'est pas arbitraire : régler un maintien déplace des membres, lisser un
+arc les déplace encore, donc **la pose des pieds passe en dernier**. Sinon les
+deux passages précédents la défont en silence.
 
-**La symétrie parasite.** Les deux côtés du corps qui font la même chose au
-même instant, ce qui est la chose la plus mécanique qu'un corps puisse faire.
-En opposition, c'est une marche ; en phase, c'est une machine.
+### Les poses figées
 
-## Ce qui est corrigé
+Une pose qui s'arrête *exactement* lit comme un arrêt sur image. Le correctif
+d'animateur s'appelle un *moving hold* : la pose porte un peu au-delà de son
+point d'arrêt et revient.
 
-**Les appuis, exactement**, avec l'IK analytique de *Footskate Cleanup for
-Motion Capture Editing* (Kovar, Schreiner et Gleicher, SIGGRAPH SCA 2002). Leur
-fonction de fondu `a(t) = 2t³ − 3t² + 1` — l'unique cubique qui vaut 1 en 0, 0
-en 1 et qui est plate aux deux bouts — est reprise telle quelle : c'est elle
-qui empêche la correction de claquer à la sortie de l'appui.
+C'est donc un **settle**, pas du bruit. La direction vient du mouvement qui
+entre dans le maintien, l'amplitude de sa vitesse, et les deux sont plafonnées
+dur : un degré ou deux, c'est un corps qui respire ; cinq, c'est une nouvelle
+action. Seules les parties qui bougeaient en héritent, au prorata.
 
-Deux écarts au papier, tous les deux subis, tous les deux dits là où ils
-mordent :
+Et les deux images aux bords du maintien sont rendues **intactes** : ce sont
+celles de l'animation, et un settle qui ne les rend pas telles quelles crée une
+discontinuité à l'endroit même qu'il devait adoucir.
 
-- Le papier peut **déplacer la racine** quand la cible est hors de portée. Un
-  clip Linen exporté sur place a le bassin cloué — c'est ce qui en fait une
-  animation Roblox et pas une cinématique — donc une cible hors de portée est
-  ramenée à jambe tendue, et le reste est **rapporté**, pas absorbé en silence.
-- Le papier **étire** un membre en dernier recours. Une part Roblox a une taille
-  fixe : cette option n'existe pas ici.
+> Le seuil de détection est volontairement minuscule (0,25 °/s sur tout le rig).
+> Un maintien *lent* est ce qu'un maintien doit être ; le défaut, c'est
+> l'**image répétée**. De la vraie captation ne descend jamais là-dessous, parce
+> qu'un vrai corps ne peut pas. Les poses de synthèse, elles, sont à zéro pile.
+
+### Les arcs
+
+Une extrémité doit décrire une courbe. L'angle se mesure sur une **fenêtre de
+40 ms**, pas d'une image à la suivante — première version, et à 120 Hz elle
+comparait des déplacements de six millièmes de stud, où la direction n'est plus
+que de l'arrondi : toutes les prises ressortaient pleines d'arcs cassés.
+
+Seuls les angles **isolés** sont corrigés, et cette restriction est toute la
+conception. Une main qui change brutalement de direction n'est pas un défaut,
+c'est un coup qui porte, et l'adoucir serait du vandalisme. Le défaut, c'est une
+image qui contredit ses deux voisines — la signature d'une erreur de reciblage.
+Les angles au bord d'un appui sont exclus d'office : la pose du talon et le
+décollement de l'orteil sont les deux instants d'un pas où le pied inverse
+volontairement.
+
+Le résultat est chirurgical : sur `09_12`, **3 images-parties touchées sur
+28 785**. Sur une marche et un enchaînement de coups propres, **aucune**.
+
+### La symétrie
+
+Un saut à deux pieds a les deux jambes qui font exactement la même chose au même
+instant. **Ce n'est pas un défaut à corriger, c'est ce qu'est un saut.**
+
+Donc la mesure regarde d'abord la démarche : les appuis alternent-ils, ou les
+deux pieds travaillent-ils ensemble ? Sur `01_01` (sauts en avant), le rapport
+dit « mouvement symétrique — normal » et `--desync` **refuse de toucher au
+clip**. Sur une marche, il ne se déclenche pas non plus, parce qu'une marche est
+déjà en opposition.
+
+Et `--desync` reste en option, pour deux raisons qui sont les mêmes : il suppose
+le clip cyclique — décaler une piste l'enroule, donc une prise qui n'était pas
+une boucle gagne une couture à l'image zéro — et une demi-foulée est le seul
+décalage qui veuille dire quelque chose, donc il exige une période mesurée et
+refuse plutôt que de deviner.
+
+### R6
+
+Une jambe R6 est **une seule part rigide** : pas de genou, donc la semelle
+atteint une **sphère**, pas un volume. Une cible ailleurs ne peut pas être
+atteinte, et prétendre le contraire reviendrait à étirer une part.
+
+La jambe est donc **visée** : tournée pour que la semelle tombe sur le point de
+la sphère le plus proche de sa cible.
+
+| Prise | R6, glissement moyen |
+| --- | --- |
+| marche `02_01` | 1,84 → **0,05** stud |
+| navigation `09_12` | 1,85 → **0,03** |
+| course `02_03` | 1,62 → 1,21 |
+
+La course résiste, et c'est la limite honnête d'un membre rigide : en course la
+jambe est trop pliée pour qu'une part droite atteigne la cible. C'est rapporté,
+pas caché.
 
 ---
 
@@ -149,22 +208,16 @@ commercial. C'est exactement ce qui a été fait.
 
 ---
 
-## Ce qui est mesuré mais pas encore corrigé
+## Ce qui reste
 
-Dit franchement, parce que c'est la suite :
-
-- **Les poses figées** — détectées, pas encore animées. Le correctif est une
-  dérive lente ajoutée au maintien.
-- **La symétrie parasite** — détectée, pas encore décalée. Le correctif est un
-  décalage de phase de quelques images sur un côté.
-- **Les arcs** — pas encore mesurés. Une extrémité qui trace une trajectoire à
-  angles au lieu d'un arc est le tell classique.
-- **R6** — mesuré, pas résolu. Une jambe R6 est une seule part rigide : pas de
-  genou, donc rien pour résoudre.
+Un seul défaut est mesuré sans être corrigé : **les articulations qui plient à
+l'envers**. C'est délibéré. Un genou à l'envers n'est pas un défaut du clip,
+c'est un défaut du solveur qui l'a produit — le rattraper après coup masquerait
+la cause. Le rapport le signale pour qu'on aille le corriger en amont.
 
 ## Ce qui n'est pas vérifié
 
-Les corrections sont vérifiées **numériquement** (16 tests, dont des clips
+Les corrections sont vérifiées **numériquement** (31 tests, dont des clips
 synthétiques où le glissement est connu d'avance par géométrie) et
 **visuellement** dans le visualiseur. Elles n'ont pas été jouées dans Roblox
 Studio.

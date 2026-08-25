@@ -57,17 +57,72 @@ MIN_PLANT_SECONDS = 0.10
 #: for the same reason.
 BLEND_SECONDS = 0.08
 
-#: Below this angular speed, in degrees per second summed over the rig, nothing
-#: is moving. A held pose that is *perfectly* still reads as a freeze frame;
-#: animators call the fix a moving hold.
-DEAD_HOLD_DEGREES = 2.0
+#: Below this angular speed, in degrees per second summed over the whole rig,
+#: a pose is not held — it is repeated. That distinction is the whole point of
+#: the number being this small: a *slow* hold is what a held pose should be,
+#: and flagging it would ask the fix to make the character fidget. Real capture
+#: never gets under this, because a real body cannot; synthesised poses sit at
+#: exactly zero, because a repeated keyframe is a repeated keyframe.
+DEAD_HOLD_DEGREES = 0.25
 
-#: Leg chains, hip to ankle. R6 has one rigid leg part and therefore no knee,
-#: so it can be measured but not solved.
+#: How far a moving hold is allowed to drift, in degrees. Held poses in real
+#: bodies drift by a degree or two — breath, balance, the weight settling. Any
+#: more and it stops reading as a hold and starts reading as a new action.
+SETTLE_DEGREES = 1.8
+
+#: Where in the hold the drift peaks. Early, because this is a settle: the pose
+#: carries a little past where it stopped and eases back, which is what a body
+#: with mass does. A symmetric bump would read as a breath instead.
+SETTLE_PEAK = 0.3
+
+#: Above this, the two sides of the body are doing the same thing at the same
+#: time. Below it, they are merely related — a walk correlates its limbs
+#: strongly and correctly.
+TWINNING_LIMIT = 0.9
+
+#: Extremities whose path is checked for corners. These are what an eye
+#: follows: a hand and a foot trace the arcs an audience reads as weight.
+EXTREMITIES = ("LeftHand", "RightHand", "LeftFoot", "RightFoot", "Head")
+
+#: A direction change sharper than this, in degrees, is a corner rather than an
+#: arc.
+CORNER_DEGREES = 60.0
+
+#: The span each direction is measured over, in **seconds**. Comparing one
+#: frame's travel with the next was the first version, and at CMU's 120 Hz that
+#: compares displacements of six thousandths of a stud, where the direction is
+#: rounding error and every clip looks full of broken arcs. An arc is a shape
+#: in time, so the window has to be in time too.
+CORNER_WINDOW = 0.04
+
+#: Below this speed, in standing heights per second, a direction change means
+#: nothing — a part that is barely moving can point anywhere.
+CORNER_SPEED = 0.4
+
+#: A corner is treated as noise only if its neighbours are this much calmer.
+#: A real change of direction — a punch landing, a foot striking — takes
+#: several frames and reads as a sustained turn; sensor noise and retargeting
+#: error show up as a single frame that disagrees with both its neighbours.
+CORNER_ISOLATION = 0.5
+
+#: Left and right plants overlapping more than this share of their total span
+#: means the feet work together rather than alternate: a jump, not a walk.
+SYMMETRIC_OVERLAP = 0.6
+
+#: Parts contributing less than this share of the incoming motion are left
+#: alone, so a settle moves what was moving rather than nudging the whole rig.
+SETTLE_SHARE = 0.05
+
+#: Leg chains, hip to ankle.
 LEG_CHAINS = {
     "Left": ("LeftUpperLeg", "LeftLowerLeg", "LeftFoot"),
     "Right": ("RightUpperLeg", "RightLowerLeg", "RightFoot"),
 }
+
+#: R6's legs, which are one rigid part each. There is no knee, so the sole can
+#: only be swung about the hip: it reaches a sphere, not a volume. Targets off
+#: that sphere are met as closely as aiming allows and the rest is reported.
+R6_LEGS = ("Left Leg", "Right Leg")
 
 
 @dataclass
@@ -113,8 +168,18 @@ class Report:
     #: Runs of frames in which nothing moves at all.
     dead_holds: list[tuple[int, int]] = field(default_factory=list)
     #: 0..1 per limb pair. 1 is both sides doing the same thing at the same
-    #: time, which is the single most robotic thing a body can do.
+    #: time, which is the single most robotic thing a body can do — *unless*
+    #: the motion is meant to be symmetric, which is what ``symmetric`` says.
     twinning: dict[str, float] = field(default_factory=dict)
+    #: True when both feet plant and leave together: a jump, a squat, a
+    #: two-footed landing. Symmetry is the correct answer there, so twinning is
+    #: not reported and must never be corrected.
+    symmetric: bool = False
+    #: Seconds of one full gait cycle, from a foot's own plants. None when the
+    #: clip has no gait to measure.
+    period: float | None = None
+    #: Per extremity, the sharpest isolated corner in its path, in degrees.
+    corners: dict[str, float] = field(default_factory=dict)
 
     def lines(self) -> list[str]:
         out = [f"{self.rig}, {self.frames} images"]
@@ -125,6 +190,10 @@ class Report:
             )
         else:
             out.append("  appuis          aucun détecté")
+        sharp = {p: v for p, v in self.corners.items() if v >= CORNER_DEGREES}
+        if sharp:
+            worst = ", ".join(f"{part} {value:.0f}°" for part, value in sorted(sharp.items()))
+            out.append(f"  arcs cassés     {worst}")
         if self.hyperextended:
             worst = ", ".join(
                 f"{part} {count}" for part, count in sorted(self.hyperextended.items())
@@ -136,9 +205,15 @@ class Report:
                 f"  poses figées    {len(self.dead_holds)} ({total} images sans "
                 f"le moindre mouvement)"
             )
-        for pair, value in sorted(self.twinning.items()):
-            if value >= 0.9:
-                out.append(f"  symétrie        {pair} à {value:.2f} — les deux côtés font la même chose")
+        if self.symmetric:
+            out.append("  symétrie        mouvement symétrique (saut, accroupi) — normal")
+        else:
+            for pair, value in sorted(self.twinning.items()):
+                if value >= TWINNING_LIMIT:
+                    out.append(
+                        f"  symétrie        {pair} à {value:.2f} — les deux côtés "
+                        f"font la même chose au même instant"
+                    )
         return out
 
 
@@ -153,6 +228,12 @@ def measure(clip: AnimationClip) -> Report:
         report.worst_slide = float(max(slides))
         report.mean_slide = float(np.mean(slides))
 
+    report.symmetric = _gait_is_symmetric(report.plants)
+    report.period = _gait_period(clip, report.plants)
+    report.corners = {
+        part: float(max(values.values(), default=0.0))
+        for part, values in _corners(clip, placed).items()
+    }
     report.hyperextended = _hyperextension(clip, placed)
     report.dead_holds = _dead_holds(clip)
     report.twinning = _twinning(clip)
@@ -411,7 +492,7 @@ def plant_feet(
     can measure the result and state the difference rather than assert it.
     """
     before = measure(clip)
-    if not before.plants or clip.rig.name != "R15":
+    if not before.plants:
         return clip, before
 
     if blend_frames is None:
@@ -433,6 +514,8 @@ def plant_feet(
     for plant in before.plants:
         chain = _chain_for(plant.part)
         if chain is None:
+            if plant.part in R6_LEGS:
+                _aim_leg(fixed, rotations, plant, blend_frames)
             continue
 
         # Exact across the plant, faded across the frames on either side of it.
@@ -665,3 +748,446 @@ def _slerp(current: np.ndarray, target: np.ndarray, weight: float) -> np.ndarray
 
     return quat_slerp(np.asarray(current)[None], np.asarray(target)[None],
                       np.array([weight]))[0]
+
+
+# -- moving holds ------------------------------------------------------------
+
+
+def settle_holds(clip: AnimationClip, *, holds=None) -> AnimationClip:
+    """Give every frozen pose the drift a real body has while holding still.
+
+    A pose that stops *exactly* reads as a freeze frame — the tell that
+    separates an animation from a paused one. The animator's fix is a moving
+    hold: the pose carries a little past where it stopped and eases back.
+
+    So this is a settle, not noise. The direction comes from the motion going
+    into the hold, the amplitude from how fast that motion was, and both are
+    capped hard: a degree or two is a body breathing, five is a new action.
+
+    Only the parts that were actually moving get it, weighted by how much. A
+    hand that just came to rest settles; a foot that has been on the floor for
+    two seconds does not suddenly stir.
+    """
+    if holds is None:
+        holds = _dead_holds(clip)
+    if not holds:
+        return clip
+
+    rotations = {part: track.copy() for part, track in clip.rotations.items()}
+    settled = AnimationClip(
+        rig=clip.rig,
+        fps=clip.fps,
+        rotations=rotations,
+        name=clip.name,
+        metadata=dict(clip.metadata),
+        loop=clip.loop,
+        priority=clip.priority,
+    )
+    if clip.root_positions is not None:
+        settled.root_positions = clip.root_positions.copy()
+
+    for start, stop in holds:
+        incoming = _incoming_motion(clip, start)
+        if incoming is None:
+            continue
+        total = sum(float(np.linalg.norm(v)) for v in incoming.values())
+        if total < 1e-9:
+            continue
+
+        frames = stop - start
+        for part, vector in incoming.items():
+            size = float(np.linalg.norm(vector))
+            if size / total < SETTLE_SHARE:
+                continue
+            axis = vector / size
+            # Scaled by this part's share of the motion, so the settle is a
+            # continuation of what was happening and not a uniform wobble.
+            amplitude = np.deg2rad(SETTLE_DEGREES) * (size / total)
+
+            for offset in range(frames):
+                shape = _settle_profile(offset / max(frames - 1, 1))
+                if abs(shape) < 1e-9:
+                    continue
+                drift = _axis_angle(axis, amplitude * shape)
+                rotations[part][start + offset] = _multiply(
+                    rotations[part][start + offset], drift
+                )
+
+    return settled
+
+
+def _incoming_motion(clip: AnimationClip, start: int) -> dict[str, np.ndarray] | None:
+    """Per part, the rotation the frame before a hold was turning through.
+
+    A rotation vector — axis times angle — because that is the form that scales
+    and adds like a vector, which is what a settle needs.
+    """
+    if start < 2:
+        return None
+    out: dict[str, np.ndarray] = {}
+    for part, track in clip.rotations.items():
+        out[part] = _rotation_vector(track[start - 2], track[start - 1])
+    return out
+
+
+def _rotation_vector(before: np.ndarray, after: np.ndarray) -> np.ndarray:
+    """The turn from one quaternion to another, as axis times angle."""
+    delta = _multiply(_conjugate(np.asarray(before, dtype=float)),
+                      np.asarray(after, dtype=float))
+    if delta[3] < 0.0:
+        delta = -delta
+    sine = float(np.linalg.norm(delta[:3]))
+    if sine < 1e-12:
+        return np.zeros(3)
+    angle = 2.0 * float(np.arctan2(sine, delta[3]))
+    return delta[:3] / sine * angle
+
+
+def _settle_profile(t: float) -> float:
+    """0 at both ends, peaking early. C1 throughout, so nothing pops.
+
+    Both endpoints have to be exactly 0: the pose entering the hold and the
+    pose leaving it are the animation's, and a settle that does not hand them
+    back untouched is a discontinuity at the very frame it was meant to soften.
+    """
+    if t <= 0.0 or t >= 1.0:
+        return 0.0
+    if t < SETTLE_PEAK:
+        u = t / SETTLE_PEAK
+    else:
+        u = 1.0 - (t - SETTLE_PEAK) / (1.0 - SETTLE_PEAK)
+    return float(u * u * (3.0 - 2.0 * u))
+
+
+def _conjugate(quat: np.ndarray) -> np.ndarray:
+    return np.array([-quat[0], -quat[1], -quat[2], quat[3]])
+
+
+def _multiply(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return np.array(
+        [
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+            aw * bw - ax * bx - ay * by - az * bz,
+        ]
+    )
+
+
+# -- gait --------------------------------------------------------------------
+
+#: The right-hand limb a twinning pair names, root to tip. Only one side moves,
+#: so the other keeps the timing the animation was built around.
+_SIDE_CHAINS = {
+    "UpperArm": ("RightUpperArm", "RightLowerArm", "RightHand"),
+    "UpperLeg": ("RightUpperLeg", "RightLowerLeg", "RightFoot"),
+}
+
+
+def _gait_is_symmetric(plants: list[Plant]) -> bool:
+    """Do the two feet work together, or take turns?
+
+    This decides whether twinning is a defect at all. A two-footed jump has
+    both legs doing exactly the same thing at exactly the same time, and that
+    is not a flaw to be corrected — it is what a jump is. Reporting it, or
+    worse offsetting one leg to "fix" it, would break the motion.
+    """
+    # Symmetry is a claim about repeated events, so one plant per foot is not
+    # evidence of it. R6 legs are a single rigid part whose sole barely clears
+    # the floor, which gives one long plant per foot on a plain walk — and that
+    # walk was being announced as a jump.
+    per_side = {
+        side: [p for p in plants if p.part.startswith(side) or side in p.part]
+        for side in ("Left", "Right")
+    }
+    if min(len(found) for found in per_side.values()) < 2:
+        return False
+
+    left = _mask(plants, "Left")
+    right = _mask(plants, "Right")
+    if not left or not right:
+        return False
+    both = left & right
+    either = left | right
+    return len(both) / len(either) > SYMMETRIC_OVERLAP
+
+
+def _mask(plants: list[Plant], side: str) -> set[int]:
+    """Frames one side of the body spends on the floor.
+
+    Matched on the side appearing anywhere in the name, because R15 calls it
+    ``LeftFoot`` and R6 calls it ``Left Leg``.
+    """
+    frames: set[int] = set()
+    for plant in plants:
+        if side in plant.part:
+            frames.update(range(plant.start, plant.stop))
+    return frames
+
+
+def _gait_period(clip: AnimationClip, plants: list[Plant]) -> float | None:
+    """One full cycle, in seconds, from how often the same foot comes down."""
+    for side in ("Left", "Right"):
+        starts = sorted(p.start for p in plants if side in p.part)
+        if len(starts) >= 2:
+            gaps = np.diff(starts)
+            return float(np.median(gaps) / clip.fps)
+    return None
+
+
+def desync(clip: AnimationClip, *, report: Report | None = None) -> AnimationClip:
+    """Break genuine lockstep by shifting one side half a gait cycle.
+
+    Deliberately **not** part of the default pass, for two reasons that are
+    both about not damaging good work.
+
+    It assumes the clip is cyclic. Shifting a limb's track wraps it, so a take
+    that is not a loop gets a seam at frame zero where none existed.
+
+    And half a cycle is the only shift that means anything. A few frames does
+    not turn lockstep into opposition, it turns it into lockstep that looks
+    slightly broken — so this needs a measured gait period, and refuses without
+    one rather than guessing.
+    """
+    report = report or measure(clip)
+    if report.symmetric or report.period is None:
+        return clip
+
+    offenders = [
+        pair for pair, value in report.twinning.items() if value >= TWINNING_LIMIT
+    ]
+    if not offenders:
+        return clip
+
+    shift = round(report.period * clip.fps / 2.0)
+    if shift <= 0:
+        return clip
+
+    rotations = {part: track.copy() for part, track in clip.rotations.items()}
+    for pair in offenders:
+        # The whole limb moves, not just its root: shifting a shoulder and
+        # leaving the forearm where it was desynchronises the arm from itself.
+        for part in _SIDE_CHAINS.get(pair, ()):
+            if part in rotations:
+                rotations[part] = np.roll(clip.rotations[part], shift, axis=0)
+
+    shifted = AnimationClip(
+        rig=clip.rig,
+        fps=clip.fps,
+        rotations=rotations,
+        name=clip.name,
+        metadata=dict(clip.metadata),
+        loop=clip.loop,
+        priority=clip.priority,
+    )
+    if clip.root_positions is not None:
+        shifted.root_positions = clip.root_positions.copy()
+    return shifted
+
+
+# -- arcs --------------------------------------------------------------------
+
+
+def _corners(clip: AnimationClip, placed) -> dict[str, dict[int, float]]:
+    """Per extremity, the frames where its path turns a corner instead of curving.
+
+    Only *isolated* corners are counted, and that restriction is the whole
+    design. A hand changing direction sharply is not a defect — it is a punch
+    landing, and softening it would be vandalism. What is a defect is a single
+    frame that disagrees with both of its neighbours, which is what retargeting
+    error and sensor noise look like. A real change of direction takes several
+    frames and shows up as a sustained turn.
+    """
+    height = _standing_height(clip.rig)
+    window = max(round(CORNER_WINDOW * clip.fps), 1)
+    floor = CORNER_SPEED * height * window / max(clip.fps, 1e-6)
+
+    out: dict[str, dict[int, float]] = {}
+    for part in EXTREMITIES:
+        if part not in clip.rotations:
+            continue
+        path = np.array([frame[part][0] for frame in placed])
+        if len(path) < 2 * window + 3:
+            continue
+
+        index = np.arange(window, len(path) - window)
+        before = path[index] - path[index - window]
+        after = path[index + window] - path[index]
+
+        size_before = np.linalg.norm(before, axis=1)
+        size_after = np.linalg.norm(after, axis=1)
+        moving = (size_before > floor) & (size_after > floor)
+
+        cosine = np.sum(before * after, axis=1) / np.maximum(
+            size_before * size_after, 1e-12
+        )
+        turn = np.where(moving, np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))), 0.0)
+
+        found: dict[int, float] = {}
+        for offset in range(1, len(turn) - 1):
+            neighbours = max(turn[offset - 1], turn[offset + 1])
+            if (
+                turn[offset] >= CORNER_DEGREES
+                and neighbours < turn[offset] * CORNER_ISOLATION
+            ):
+                found[int(index[offset])] = float(turn[offset])
+        out[part] = found
+    return out
+
+
+#: Chains that drive each extremity, tip first. Smoothing starts at the tip and
+#: works inwards, because the smallest joint that can explain a corner is the
+#: one that should absorb the fix.
+_ARC_CHAINS = {
+    "LeftHand": ("LeftHand", "LeftLowerArm", "LeftUpperArm"),
+    "RightHand": ("RightHand", "RightLowerArm", "RightUpperArm"),
+    "LeftFoot": ("LeftFoot", "LeftLowerLeg", "LeftUpperLeg"),
+    "RightFoot": ("RightFoot", "RightLowerLeg", "RightUpperLeg"),
+    "Head": ("Head",),
+}
+
+
+#: Frames either side of a plant's edge where a foot's sharp turn is a heel
+#: strike or a toe-off, not an error. Those are the two moments in a step where
+#: a foot is *supposed* to reverse hard.
+CONTACT_GUARD = 4
+
+#: Passes of de-spiking. Removing one spike can leave its neighbour as the new
+#: worst frame, and two passes settle it; more just grinds detail away.
+ARC_PASSES = 2
+
+
+def smooth_arcs(clip: AnimationClip) -> AnimationClip:
+    """Remove the isolated one-frame spikes from the paths the eye follows.
+
+    A spiking frame is replaced by the pose halfway between its neighbours,
+    which is what de-spiking means and why the isolation test above has to be
+    strict: applied to a sustained turn this would flatten a real action.
+
+    Corners at the edge of a foot plant are left alone outright. Heel strike
+    and toe-off are the two moments in a step where a foot reverses hard on
+    purpose, and rounding them off is how a walk loses its weight.
+
+    Not a filter over the whole clip either. A capture's detail is the reason
+    to use a capture; smoothing everything to fix four frames trades what makes
+    it good for what makes it tidy.
+    """
+    result = clip
+    for _ in range(ARC_PASSES):
+        placed = _walk(result)
+        corners = _corners(result, placed)
+        guarded = _contact_frames(_plants(result, placed))
+        targets = {
+            part: [frame for frame in frames if frame not in guarded]
+            for part, frames in corners.items()
+        }
+        if not any(targets.values()):
+            break
+
+        rotations = {part: track.copy() for part, track in result.rotations.items()}
+        for extremity, frames in targets.items():
+            for frame in frames:
+                if not 0 < frame < result.frame_count - 1:
+                    continue
+                for part in _ARC_CHAINS.get(extremity, ()):
+                    if part in rotations:
+                        track = rotations[part]
+                        track[frame] = _slerp(track[frame - 1], track[frame + 1], 0.5)
+
+        result = AnimationClip(
+            rig=result.rig,
+            fps=result.fps,
+            rotations=rotations,
+            name=result.name,
+            metadata=dict(result.metadata),
+            loop=result.loop,
+            priority=result.priority,
+        )
+        if clip.root_positions is not None:
+            result.root_positions = clip.root_positions.copy()
+    return result
+
+
+def _contact_frames(plants: list[Plant]) -> set[int]:
+    """Frames around a plant's edges, where a sharp turn is the point."""
+    frames: set[int] = set()
+    for plant in plants:
+        for edge in (plant.start, plant.stop - 1):
+            frames.update(range(edge - CONTACT_GUARD, edge + CONTACT_GUARD + 1))
+    return frames
+
+
+# -- R6 ----------------------------------------------------------------------
+
+
+def _aim_leg(
+    clip: AnimationClip,
+    rotations: dict[str, np.ndarray],
+    plant: Plant,
+    blend_frames: int,
+) -> None:
+    """Swing an R6 leg at its target. The best a rigid limb can do.
+
+    An R6 leg is one part: hip to sole is a fixed length, so the sole reaches a
+    **sphere** and nothing inside it. A target anywhere else cannot be met, and
+    pretending otherwise would mean stretching a part.
+
+    So the leg is aimed — rotated so the sole lands on the closest point of
+    that sphere to where it should be. The horizontal error mostly goes away,
+    because a plant target sits near the sole's own radius already; what is
+    left is radial, and it is left in the report rather than hidden.
+    """
+    low = max(plant.start - blend_frames, 0)
+    high = min(plant.stop + blend_frames, clip.frame_count)
+    torso = clip.rig.part(plant.part).parent
+
+    for frame in range(low, high):
+        weight = _blend_weight(frame, plant, blend_frames)
+        if weight <= 1e-6:
+            continue
+
+        pose = {part: track[frame] for part, track in rotations.items()}
+        placed = place_rotations(clip.rig, pose)
+        hip = _joint_positions(clip, placed, plant.part)
+        sole = _sole(clip, placed, plant.part)
+        target = _target_at(plant, frame, clip, placed)
+
+        align = _rotation_between(sole - hip, np.asarray(target) - hip)
+        world = align @ placed[plant.part][1]
+        local = mat_to_quat(placed[torso][1].T @ world)
+        rotations[plant.part][frame] = _slerp(
+            rotations[plant.part][frame], local, weight
+        )
+
+
+# -- the whole pass ----------------------------------------------------------
+
+
+def polish(
+    clip: AnimationClip, *, allow_desync: bool = False
+) -> tuple[AnimationClip, Report, Report]:
+    """Every correction, in the order they have to happen.
+
+    Returns the finished clip and the report from before and after, so the
+    caller can print the difference instead of asserting it.
+
+    The order is not arbitrary. Settling a hold moves limbs, and smoothing an
+    arc moves them again, so foot planting goes **last** — it has to have the
+    final word on where a foot is, or the two earlier passes quietly undo it.
+
+    ``allow_desync`` is off by default and stays off unless someone asks,
+    because it is the one correction here that can damage good work: it assumes
+    the clip is cyclic and wraps a limb's timing, which puts a seam at frame
+    zero of a take that was never a loop.
+    """
+    before = measure(clip)
+
+    result = settle_holds(clip, holds=before.dead_holds)
+    result = smooth_arcs(result)
+    if allow_desync:
+        result = desync(result)
+    result, _ = plant_feet(result)
+
+    return result, before, measure(result)

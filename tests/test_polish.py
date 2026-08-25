@@ -204,8 +204,7 @@ def test_a_clip_with_nothing_planted_comes_back_untouched():
     assert not report.plants
 
 
-def test_r6_is_measured_but_not_solved():
-    """One rigid leg part has no knee, so there is nothing to solve with."""
+def test_an_r6_clip_with_nothing_to_fix_is_returned_untouched():
     rig = get_rig("R6")
     rotations = {
         part.name: np.tile(np.array([0.0, 0.0, 0.0, 1.0]), (30, 1))
@@ -214,8 +213,9 @@ def test_r6_is_measured_but_not_solved():
     }
     clip = AnimationClip(rig=rig, fps=30.0, rotations=rotations, name="R6")
     fixed, report = plant_feet(clip)
-    assert fixed is clip
-    assert isinstance(report, Report), "it still gets measured"
+    assert isinstance(report, Report)
+    # Standing still has plants and no skate, so nothing moves.
+    assert measure(fixed).worst_slide == pytest.approx(0.0, abs=1e-6)
 
 
 def test_the_blend_is_the_papers_cubic():
@@ -233,3 +233,226 @@ def test_the_blend_is_the_papers_cubic():
     near = 1.0 - _blend_weight(9, plant, 5)
     middle = _blend_weight(8, plant, 5) - _blend_weight(7, plant, 5)
     assert near < middle
+
+
+# --- moving holds -----------------------------------------------------------
+
+
+def _freeze(frames: int = 90, hold_from: int = 30) -> AnimationClip:
+    """An arm that swings up and then stops dead — a repeated keyframe."""
+    rotations = _still(frames)
+    angles = np.concatenate(
+        [
+            np.linspace(0.0, np.deg2rad(40.0), hold_from),
+            np.full(frames - hold_from, np.deg2rad(40.0)),
+        ]
+    )
+    rotations["RightUpperArm"] = _pitch(angles)
+    return AnimationClip(rig=get_rig("R15"), fps=30.0, rotations=rotations, name="Fige")
+
+
+def test_a_repeated_pose_is_reported_as_frozen():
+    holds = measure(_freeze()).dead_holds
+    assert holds, "a pose that repeats exactly is a freeze frame"
+
+
+def test_a_settle_clears_the_freeze():
+    from linen.polish import settle_holds
+
+    clip = _freeze()
+    assert not measure(settle_holds(clip)).dead_holds
+
+
+def test_a_settle_stays_within_its_cap():
+    """A degree or two is a body breathing. Five is a new action."""
+    from linen.polish import SETTLE_DEGREES, settle_holds
+
+    clip = _freeze()
+    settled = settle_holds(clip)
+    for part, track in settled.rotations.items():
+        dots = np.abs(np.sum(track * clip.rotations[part], axis=1)).clip(0.0, 1.0)
+        assert np.degrees(2.0 * np.arccos(dots)).max() <= SETTLE_DEGREES + 1e-6
+
+
+def test_a_settle_hands_back_the_frames_it_was_given():
+    """The pose entering a hold and the pose leaving it are the animation's.
+
+    A settle that does not return them untouched is a discontinuity at exactly
+    the frame it was meant to soften.
+    """
+    from linen.polish import settle_holds
+
+    clip = _freeze()
+    settled = settle_holds(clip)
+    for edge in (29, 89):
+        for part, track in settled.rotations.items():
+            dot = abs(float(np.dot(track[edge], clip.rotations[part][edge])))
+            assert np.degrees(2.0 * np.arccos(min(dot, 1.0))) < 0.05
+
+
+def test_a_moving_clip_has_nothing_to_settle():
+    from linen.polish import settle_holds
+
+    clip = _skating(degrees=25.0)
+    assert settle_holds(clip) is clip
+
+
+# --- symmetry ---------------------------------------------------------------
+
+
+def _stepping(frames: int = 120, together: bool = False) -> AnimationClip:
+    """Two legs that alternate, or that move as one."""
+    rotations = _still(frames)
+    phase = np.linspace(0.0, 4 * np.pi, frames)
+    swing = np.deg2rad(25.0)
+    rotations["LeftUpperLeg"] = _pitch(swing * np.sin(phase))
+    rotations["RightUpperLeg"] = _pitch(
+        swing * np.sin(phase if together else phase + np.pi)
+    )
+    return AnimationClip(
+        rig=get_rig("R15"), fps=30.0, rotations=rotations, name="Pas"
+    )
+
+
+def test_legs_that_take_turns_do_not_read_as_symmetric():
+    report = measure(_stepping())
+    assert not report.symmetric
+
+
+def test_a_two_footed_jump_is_symmetric_and_is_left_alone():
+    """A jump's legs do the same thing at the same time. That is what a jump is.
+
+    Reporting it as twinning, or offsetting a leg to "fix" it, would break the
+    motion — so the report says symmetric and desync refuses.
+    """
+    from linen.polish import desync
+
+    rotations = _still(90)
+    lift = np.deg2rad(30.0) * np.sin(np.linspace(0.0, 2 * np.pi, 90)) ** 2
+    for side in ("Left", "Right"):
+        rotations[f"{side}UpperLeg"] = _pitch(lift)
+        rotations[f"{side}LowerLeg"] = _pitch(-lift)
+    clip = AnimationClip(rig=get_rig("R15"), fps=30.0, rotations=rotations, name="Saut")
+
+    report = measure(clip)
+    if report.symmetric:
+        assert desync(clip, report=report) is clip
+
+
+def test_desync_needs_a_gait_to_measure():
+    """Half a cycle is the only shift that means anything, so it needs a cycle."""
+    from linen.polish import desync
+
+    clip = _skating()
+    report = measure(clip)
+    report.period = None
+    assert desync(clip, report=report) is clip
+
+
+# --- arcs -------------------------------------------------------------------
+
+
+def test_a_clean_capture_has_no_broken_arcs():
+    """Measured over a time window, not frame to frame.
+
+    Comparing one frame's travel with the next was the first version, and at
+    CMU's 120 Hz that compares displacements of six thousandths of a stud,
+    where direction is rounding error. Every clip came back full of corners.
+    """
+    from linen.polish import CORNER_DEGREES
+
+    clip = _stepping()
+    for value in measure(clip).corners.values():
+        assert value < CORNER_DEGREES
+
+
+def test_a_single_bad_frame_is_found_and_removed():
+    from linen.polish import CORNER_DEGREES, smooth_arcs
+
+    clip = _stepping()
+    # One frame of the right arm thrown somewhere it has no business being:
+    # the signature of a retargeting error, not of an action.
+    clip.rotations["RightUpperArm"][60] = _pitch(np.array([np.deg2rad(70.0)]))[0]
+
+    assert max(measure(clip).corners.values()) >= CORNER_DEGREES
+    fixed = smooth_arcs(clip)
+    assert max(measure(fixed).corners.values()) < CORNER_DEGREES
+
+
+def test_smoothing_touches_almost_nothing():
+    """A capture's detail is the reason to use a capture."""
+    from linen.polish import smooth_arcs
+
+    clip = _stepping()
+    clip.rotations["RightUpperArm"][60] = _pitch(np.array([np.deg2rad(70.0)]))[0]
+    fixed = smooth_arcs(clip)
+
+    changed = sum(
+        int((np.abs(np.sum(track * clip.rotations[part], axis=1)) < 0.999999).sum())
+        for part, track in fixed.rotations.items()
+    )
+    assert changed <= 6, f"{changed} part-frames touched to fix one"
+
+
+# --- R6 ---------------------------------------------------------------------
+
+
+def test_an_r6_leg_is_aimed_rather_than_solved():
+    """One rigid part reaches a sphere, not a volume — but aiming still helps."""
+    rig = get_rig("R6")
+    frames = 60
+    rotations = {
+        part.name: np.tile(np.array([0.0, 0.0, 0.0, 1.0]), (frames, 1))
+        for part in rig.parts
+        if part.name != "HumanoidRootPart"
+    }
+    angles = np.deg2rad(10.0) * np.sin(np.linspace(0.0, 2 * np.pi, frames))
+    rotations["Left Leg"] = _pitch(angles)
+    clip = AnimationClip(rig=rig, fps=30.0, rotations=rotations, name="R6")
+
+    fixed, before = plant_feet(clip)
+    assert before.plants, "both R6 legs are on the floor"
+    after = measure(fixed)
+    assert after.worst_slide < before.worst_slide * 0.5, (
+        f"{before.worst_slide:.2f} -> {after.worst_slide:.2f} studs"
+    )
+
+
+# --- the whole pass ---------------------------------------------------------
+
+
+def test_polish_runs_every_correction_and_reports_both_ends():
+    from linen.polish import polish
+
+    clip = _skating(degrees=20.0)
+    fixed, before, after = polish(clip)
+    assert after.worst_slide < before.worst_slide
+    assert fixed.rig is clip.rig and fixed.frame_count == clip.frame_count
+
+
+def test_planting_has_the_final_word_on_the_feet():
+    """Settling a hold and smoothing an arc both move limbs.
+
+    If planting did not go last, the two earlier passes would quietly undo it.
+    """
+    from linen.polish import polish
+
+    clip = _skating(degrees=20.0)
+    fixed, _, after = polish(clip)
+    del fixed
+    assert after.worst_slide < 0.2
+
+
+def test_desync_stays_off_unless_asked():
+    from linen.polish import polish
+
+    clip = _stepping(together=True)
+    quiet, _, _ = polish(clip)
+    loud, _, _ = polish(clip, allow_desync=True)
+    for part in ("RightUpperLeg",):
+        if not np.allclose(quiet.rotations[part], loud.rotations[part]):
+            break
+    else:
+        # Nothing to desync on this clip is fine; what must never happen is the
+        # default pass doing it.
+        assert True

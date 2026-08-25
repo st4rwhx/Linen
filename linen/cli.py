@@ -94,8 +94,18 @@ def _add_common_output(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help=(
             "measure the clip against what an animator judges by eye — foot "
-            "skate, hyperextension, dead holds, twinning — and plant the feet "
-            "exactly. Prints the numbers before and after"
+            "skate, broken arcs, joints bending backwards, frozen poses, "
+            "twinning — and fix what can be fixed. Prints the numbers before "
+            "and after"
+        ),
+    )
+    parser.add_argument(
+        "--desync",
+        action="store_true",
+        help=(
+            "with --polish, also break genuine lockstep by shifting one limb "
+            "half a gait cycle. Off by default: it assumes the clip is cyclic, "
+            "and it is never applied to motion that is meant to be symmetric"
         ),
     )
     parser.add_argument(
@@ -775,7 +785,7 @@ def _skins(args, rig, actors: int = 1) -> list:
 
 def _write(clips: list[AnimationClip], args) -> int:
     if getattr(args, "polish", False):
-        clips = [_polished(clip) for clip in clips]
+        clips = [_polished(clip, args) for clip in clips]
 
     for clip in clips:
         out = _suffixed(args.out, clip.rig.name, len(clips) > 1)
@@ -818,18 +828,18 @@ def _write(clips: list[AnimationClip], args) -> int:
     return 0
 
 
-def _polished(clip: AnimationClip) -> AnimationClip:
-    """Plant the feet, and print what changed rather than claiming it did."""
-    from .polish import measure, plant_feet
+def _polished(clip: AnimationClip, args) -> AnimationClip:
+    """Run the finishing pass, and print what changed rather than claiming it."""
+    from .polish import polish
 
-    fixed, before = plant_feet(clip)
+    fixed, before, after = polish(clip, allow_desync=getattr(args, "desync", False))
     print(f"finition — {clip.rig.name}")
     for line in before.lines()[1:]:
         print(f"  avant {line.strip()}")
     if fixed is clip:
-        print("  (rien a corriger, ou rig sans genou)")
+        print("  (rien a corriger)")
         return clip
-    for line in measure(fixed).lines()[1:]:
+    for line in after.lines()[1:]:
         print(f"  apres {line.strip()}")
     return fixed
 
