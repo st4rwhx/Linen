@@ -87,6 +87,17 @@ Le raisonnement complet est dans
 > C'est un fichier de 7,3 Mo : 544 images-clés à 120 Hz, la cadence de la
 > captation d'origine. L'import dans Studio prend quelques secondes.
 
+### `Appuis_avant_apres.html` — ce que la finition change
+
+La même marche CMU deux fois, côte à côte, de profil. **Bleu : avant. Orange :
+après `--polish`.** Regarde les pieds au ralenti (0,25×), vue **Profil** ou
+**Dessus**.
+
+Le glissement du pied posé passe de **1,34 stud à 0,07** — un pied R15 fait
+0,86 stud de long, donc de deux longueurs de pied par appui à un dix-septième.
+Le raisonnement et les chiffres sur cinq prises sont dans
+[`docs/FINITION.md`](../../docs/FINITION.md).
+
 ### Les `.moon.rbxmx` — la même animation, mais modifiable
 
 À côté de deux des démos il y a un fichier `.moon.rbxmx`. C'est la **même

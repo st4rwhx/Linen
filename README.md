@@ -17,6 +17,11 @@ prompt texte, sans coût d'API.
 > **[`docs/MODE_EMPLOI.md`](docs/MODE_EMPLOI.md)** : l'installation, chaque
 > commande, ce qu'elle fait vraiment, et où sont les limites.
 >
+> **Tu veux être meilleur qu'un animateur pro ?**
+> **[`docs/FINITION.md`](docs/FINITION.md)** : `--polish` mesure le patinage
+> des pieds en studs et le ramène à 0,05 — sur de la vraie mocap studio. Un
+> animateur juge à l'œil ; un nombre ne s'arrête pas.
+>
 > **Tu veux finir l'animation à la main ?**
 > **[`docs/MOON.md`](docs/MOON.md)** : `--moon` écrit une sauvegarde Moon
 > Animator 2 à côté du `.rbxmx`, et la vraie réponse à « est-ce qu'on peut

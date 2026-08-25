@@ -90,6 +90,15 @@ def _add_common_output(parser: argparse.ArgumentParser) -> None:
         help="skip the standalone .html 3D viewer written next to the .rbxmx",
     )
     parser.add_argument(
+        "--polish",
+        action="store_true",
+        help=(
+            "measure the clip against what an animator judges by eye — foot "
+            "skate, hyperextension, dead holds, twinning — and plant the feet "
+            "exactly. Prints the numbers before and after"
+        ),
+    )
+    parser.add_argument(
         "--moon",
         action="store_true",
         help=(
@@ -765,6 +774,9 @@ def _skins(args, rig, actors: int = 1) -> list:
 
 
 def _write(clips: list[AnimationClip], args) -> int:
+    if getattr(args, "polish", False):
+        clips = [_polished(clip) for clip in clips]
+
     for clip in clips:
         out = _suffixed(args.out, clip.rig.name, len(clips) > 1)
         frames = (
@@ -804,6 +816,22 @@ def _write(clips: list[AnimationClip], args) -> int:
 
     print("import into Studio with Animation Editor > ... > Import > From File")
     return 0
+
+
+def _polished(clip: AnimationClip) -> AnimationClip:
+    """Plant the feet, and print what changed rather than claiming it did."""
+    from .polish import measure, plant_feet
+
+    fixed, before = plant_feet(clip)
+    print(f"finition — {clip.rig.name}")
+    for line in before.lines()[1:]:
+        print(f"  avant {line.strip()}")
+    if fixed is clip:
+        print("  (rien a corriger, ou rig sans genou)")
+        return clip
+    for line in measure(fixed).lines()[1:]:
+        print(f"  apres {line.strip()}")
+    return fixed
 
 
 def _suffixed(path: Path, rig: str, multiple: bool) -> Path:
