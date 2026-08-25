@@ -217,13 +217,14 @@ def _add_retarget(sub) -> None:
 def _add_bvh(sub) -> None:
     parser = sub.add_parser(
         "bvh",
-        help="BVH from any text-to-motion tool -> Roblox animation",
+        help="BVH or Collada capture -> Roblox animation",
         description=(
-            "Retarget a humanoid BVH — SayMotion, a locally run MoMask/MDM, a "
-            "Mixamo download — onto a Roblox rig."
+            "Retarget a humanoid capture — a Mixamo download, SayMotion, a "
+            "locally run MoMask/MDM — onto a Roblox rig. Takes .bvh or .dae; "
+            "Collada is the one Mixamo exports directly, so it needs no Blender."
         ),
     )
-    parser.add_argument("file", type=Path, help="a .bvh file")
+    parser.add_argument("file", type=Path, help="a .bvh or .dae file")
     parser.add_argument("--skeleton", default="mixamo", help="source naming convention")
     parser.add_argument("--units", default="cm", choices=("mm", "cm", "m"))
     parser.add_argument(
@@ -478,9 +479,12 @@ def _cmd_retarget(args) -> int:
 
 
 def _cmd_bvh(args) -> int:
-    from .sources import load_bvh
+    from .sources import load_bvh, load_collada
 
-    track = load_bvh(args.file, skeleton=args.skeleton, units=args.units, fps=args.fps)
+    # Chosen by suffix rather than by a flag: the file already says which it is,
+    # and asking twice is a way to get told the wrong thing.
+    read = load_collada if args.file.suffix.lower() == ".dae" else load_bvh
+    track = read(args.file, skeleton=args.skeleton, units=args.units, fps=args.fps)
     return _write(_solve_all(args, track, args.name or args.file.stem), args)
 
 

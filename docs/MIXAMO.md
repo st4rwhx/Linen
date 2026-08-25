@@ -8,27 +8,42 @@ centaines d'animations issues de vraie capture de mouvement, retravaillées par
 des animateurs professionnels. C'est le meilleur saut de qualité disponible sans
 matériel.
 
-## Le point que je n'avais pas vérifié
+## Le chemin, sans Blender
 
-**Mixamo n'exporte pas de BVH.** Seulement FBX et Collada (DAE). Or `linen bvh`
-lit du BVH. Il manque donc une conversion, et j'avais présenté ce chemin comme
-direct alors qu'il ne l'est pas.
-
-Blender est le convertisseur, et il est gratuit.
-
-## Le chemin complet
+**Mixamo n'exporte pas de BVH** — seulement FBX et Collada (`.dae`). Le chemin
+passait donc par Blender. Plus maintenant : `linen bvh` lit le Collada
+directement, choisi d'après le suffixe du fichier.
 
 ```
-Mixamo  --FBX-->  Blender  --BVH-->  linen bvh  -->  .rbxmx  -->  Studio
+Mixamo  --.dae-->  linen bvh  -->  .rbxmx  -->  Studio
 ```
 
-1. Sur Mixamo, choisis une animation. **Download** → format **FBX**, et
-   **Without Skin** : on ne veut que le mouvement, pas le personnage.
-2. Dans Blender : `File > Import > FBX`.
-3. `File > Export > Motion Capture (.bvh)`.
-4. ```bash
-   linen bvh danse.bvh --skeleton mixamo --units cm -o Danse.rbxmx
-   ```
+**1. Télécharger.** Sur Mixamo, choisis l'animation, bouton **Download** :
+
+| Champ | Mets ça | Pourquoi |
+| --- | --- | --- |
+| Format | **`Collada (.dae)`** | Le FBX encode des courbes par canal, qu'il faut réinterpréter — ordre de rotation, pré-rotation, mode temporel. Le Collada de Mixamo cuit **une matrice 4×4 par os et par image** : il n'y a plus rien à interpréter |
+| Skin | **`Without Skin`** | On ne veut que le mouvement, pas le personnage |
+| Frames per Second | **`30`** | La cadence de Roblox |
+| Keyframe Reduction | **`none`** | Linen réduit lui-même, et en mesurant |
+
+**2. Une commande.**
+
+```bash
+linen bvh Walking.dae --units cm --polish --moon --rig both -o Walk.rbxmx
+```
+
+**3. Import Studio** — Animation Editor → `⋯` → **Import** → **From File…**
+
+### Pourquoi le Collada et pas le FBX
+
+Un import mocap subtilement faux donne un squelette qui a l'air *presque* juste,
+et presque juste est le pire des ratés : il passe la relecture et se voit en jeu.
+Le FBX offre trois occasions de se tromper que le Collada n'offre pas du tout.
+
+Le lecteur est dans [`linen/sources/collada.py`](../linen/sources/collada.py),
+vérifié par onze tests contre des fichiers écrits à la main — dont un squelette
+Mixamo complet de 21 os passé de bout en bout par la vraie commande.
 
 Les repères que Mixamo n'a pas — talons, oreilles — sont reconstruits, et le
 lacet de la tête suit le buste. C'est la seule perte connue de ce chemin.

@@ -31,6 +31,18 @@ __all__ = [
 ]
 
 
+def load_collada(path, *, skeleton: str = "mixamo", units: str = "cm", fps=None):
+    """A Collada (.dae) capture as a landmark track.
+
+    The route that skips Blender: Mixamo exports Collada directly, and a
+    Collada export bakes a matrix per joint per frame, so there is nothing left
+    to interpret.
+    """
+    from .collada import load_collada as _load
+
+    return _load(path, skeleton=skeleton, units=units, fps=fps)
+
+
 def load_bvh(path, *, skeleton: str = "mixamo", units: str = "cm", fps: float | None = None):
     """Parse a BVH file and map it onto MediaPipe landmark names."""
     motion = parse_bvh(path)
