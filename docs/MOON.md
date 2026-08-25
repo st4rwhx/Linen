@@ -15,7 +15,7 @@ dans une animation sont publiés et accessibles, et on en a déjà une partie :
 | Capturer des milliers de clips en studio | **On a l'équivalent** : CMU, 2548 captations, licence commerciale explicite |
 | Choisir le bon clip au bon moment (motion matching) | **Fait** — `linen library` mesure et classe, la fenêtre est choisie dans la prise |
 | Raccorder sans couture (inertialisation) | **Fait** — la formule d'Ubisoft La Forge, raccords mesurés à 3–5 °/image |
-| Mouvement secondaire, pieds au sol, équilibre | **Écrit, pas encore éprouvé** — `runtime/` |
+| Mouvement secondaire, pieds au sol, équilibre | **Écrit, typé strict, jamais joué dans Studio** — `runtime/` |
 | Superposition, blend spaces, sync de phase | **Le moteur le fait** depuis juillet 2026 (Animation Graphs) |
 | Son collé à l'image | **Fait** — `linen/scene/audio.py` |
 | **Un animateur qui repasse dessus** | **Rien. Et c'est là qu'est tout l'écart.** |
