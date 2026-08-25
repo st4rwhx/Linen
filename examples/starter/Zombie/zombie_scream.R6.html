@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zombie_scream — Linen</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f25; --line: #2a2f37;
+    --ink: #e6e9ee; --dim: #8b93a1; --accent: #6ea8fe;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 14px; margin: 0; font-weight: 600; }
+  header .meta { color: var(--dim); font-size: 12px; }
+  main { flex: 1; position: relative; min-height: 0; }
+  canvas#stage { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas#stage:active { cursor: grabbing; }
+  #hud {
+    position: absolute; top: 10px; left: 12px; pointer-events: none;
+    font-variant-numeric: tabular-nums; color: var(--dim); font-size: 12px;
+  }
+  #fired {
+    position: absolute; top: 10px; right: 12px; pointer-events: none;
+    text-align: right; font-size: 12px; max-width: 40%;
+  }
+  #fired div { opacity: 0.9; }
+  #legend {
+    position: absolute; bottom: 10px; left: 12px; pointer-events: none;
+    color: var(--dim); font-size: 11px;
+  }
+  footer { border-top: 1px solid var(--line); background: var(--panel); }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; flex-wrap: wrap; }
+  button, select {
+    background: #262b33; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: #3d444f; }
+  button.on { background: var(--accent); color: #0d1117; border-color: var(--accent); }
+  label { color: var(--dim); display: inline-flex; align-items: center; gap: 6px; }
+  #time { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 128px; }
+  canvas#timeline { display: block; width: 100%; height: 92px; cursor: pointer; }
+  kbd {
+    background: #262b33; border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 4px; font: 11px ui-monospace, monospace;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>zombie_scream</h1>
+  <span class="meta" id="summary"></span>
+</header>
+
+<main>
+  <canvas id="stage"></canvas>
+  <div id="hud"></div>
+  <div id="fired"></div>
+  <div id="legend">
+    glisser : tourner &nbsp;·&nbsp; molette : zoom &nbsp;·&nbsp; maj+glisser : déplacer
+    &nbsp;·&nbsp; <kbd>espace</kbd> lecture &nbsp;·&nbsp; <kbd>←</kbd><kbd>→</kbd> frame
+  </div>
+</main>
+
+<footer>
+  <canvas id="timeline"></canvas>
+  <div class="bar">
+    <button id="play">▶ Lecture</button>
+    <button id="loop" class="on">↻ Boucle</button>
+    <span id="time"></span>
+    <label>vitesse
+      <select id="speed">
+        <option value="0.1">0,1×</option>
+        <option value="0.25">0,25×</option>
+        <option value="0.5">0,5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+    <label id="skinpick" hidden>rig
+      <select id="skin"></select>
+    </label>
+    <button id="director">🎬 Caméra du réalisateur</button>
+    <button id="showset" class="on">Décor</button>
+    <button id="showgrid" class="on">Grille</button>
+    <button id="front">Face</button>
+    <button id="side">Profil</button>
+    <button id="top">Dessus</button>
+  </div>
+</footer>
+
+<script>
+const DATA = {"skins":[],"name":"zombie_scream","fps":30.0,"duration":2.8,"frameCount":85,"rigs":{"R6":{"name":"R6","parts":[{"name":"HumanoidRootPart","parent":null,"joint":null,"size":[2.0,2.0,1.0],"pivot":[0.0,-1.0,0.0],"offsetFromPivot":[0.0,1.0,0.0]},{"name":"Torso","parent":"HumanoidRootPart","joint":"RootJoint","size":[2.0,2.0,1.0],"pivot":[0.0,-1.0,0.0],"offsetFromPivot":[0.0,1.0,0.0]},{"name":"Head","parent":"Torso","joint":"Neck","size":[2.0,1.0,1.0],"pivot":[0.0,1.0,0.0],"offsetFromPivot":[0.0,0.5,0.0]},{"name":"Left Arm","parent":"Torso","joint":"Left Shoulder","size":[1.0,2.0,1.0],"pivot":[-1.5,1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]},{"name":"Right Arm","parent":"Torso","joint":"Right Shoulder","size":[1.0,2.0,1.0],"pivot":[1.5,1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]},{"name":"Left Leg","parent":"Torso","joint":"Left Hip","size":[1.0,2.0,1.0],"pivot":[-0.5,-1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]},{"name":"Right Leg","parent":"Torso","joint":"Right Hip","size":[1.0,2.0,1.0],"pivot":[0.5,-1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]}]}},"actors":[{"name":"zombie_scream","rig":"R6","position":[0.0,3.0,0.0],"yaw":0.0,"rotations":{"Torso":[-0.09466,-0.00506,0.0084,0.99546,-0.09649,-0.00511,0.00744,0.99529,-0.09964,-0.00517,0.00558,0.99499,-0.1029,-0.00518,0.00358,0.99467,-0.10514,-0.00504,0.0023,0.99444,-0.10391,-0.00477,0.00252,0.99457,-0.09629,-0.00441,0.0033,0.99534,-0.07966,-0.00382,0.0029,0.99681,-0.05378,-0.00275,0.00102,0.99855,-0.02219,-0.00124,-0.00108,0.99975,0.00901,0.00022,-0.00234,0.99996,0.03479,0.0012,-0.00273,0.99939,0.05341,0.00168,-0.00339,0.99857,0.06537,0.00175,-0.00585,0.99784,0.07151,0.00136,-0.01223,0.99736,0.07082,0.00064,-0.02266,0.99723,0.06154,2e-05,-0.034,0.99753,0.04249,-0.00021,-0.04207,0.99821,0.01549,-0.00013,-0.04388,0.99892,-0.01565,-1e-05,-0.03833,0.99914,-0.04798,-4e-05,-0.02447,0.99855,-0.0799,-0.00088,-0.00172,0.9968,-0.10979,-0.00393,0.02586,0.99361,-0.13571,-0.00972,0.04941,0.98947,-0.15761,-0.01589,0.06074,0.9855,-0.17706,-0.01765,0.0582,0.98232,-0.19616,-0.01208,0.04572,0.97943,-0.21572,-0.00028,0.02712,0.97608,-0.2364,0.01397,0.00936,0.97151,-0.25898,0.02675,-1e-05,0.96551,-0.28248,0.03388,0.00089,0.95868,-0.30693,0.03362,0.00381,0.95113,-0.33123,0.02894,0.00179,0.9431,-0.3536,0.02585,-0.0041,0.93503,-0.37221,0.02677,-0.00927,0.92771,-0.38639,0.02911,-0.01315,0.92178,-0.39751,0.0298,-0.01672,0.91696,-0.40537,0.02797,-0.0185,0.91354,-0.41002,0.02434,-0.01756,0.91158,-0.41202,0.02023,-0.01535,0.91082,-0.41232,0.01833,-0.01447,0.91074,-0.41155,0.02038,-0.01418,0.91105,-0.41071,0.0248,-0.01191,0.91135,-0.41043,0.02688,-0.00626,0.91148,-0.41039,0.02309,0.00107,0.91161,-0.40992,0.01402,0.00746,0.91198,-0.40935,0.00383,0.01152,0.9123,-0.40943,-0.0024,0.01324,0.91224,-0.41032,-0.0038,0.0135,0.91183,-0.41203,-0.00232,0.01343,0.91107,-0.41522,-0.00176,0.01443,0.90961,-0.41989,-0.00324,0.01702,0.90741,-0.42497,-0.00688,0.02117,0.90493,-0.42851,-0.01132,0.02543,0.90311,-0.42899,-0.01456,0.02761,0.90277,-0.42569,-0.01534,0.02642,0.90435,-0.41535,-0.01287,0.02073,0.90933,-0.3965,-0.00879,0.01168,0.91792,-0.36868,-0.00409,0.0025,0.92954,-0.33657,-0.00028,-0.00197,0.94166,-0.30541,0.00219,-0.00021,0.95222,-0.27859,0.00262,0.00326,0.9604,-0.25602,0.00115,0.00365,0.96666,-0.23572,-0.00111,0.0006,0.97182,-0.2166,-0.0026,-0.00178,0.97626,-0.19882,-0.00283,-0.00075,0.98003,-0.18274,-0.0024,0.00288,0.98315,-0.16856,-0.00217,0.0065,0.98567,-0.15612,-0.0025,0.00839,0.9877,-0.14487,-0.0032,0.00829,0.98941,-0.13479,-0.00393,0.00731,0.99084,-0.12556,-0.00455,0.00618,0.99206,-0.11712,-0.00503,0.00546,0.99309,-0.10909,-0.00536,0.00491,0.99401,-0.10171,-0.0054,0.00489,0.99479,-0.09591,-0.00522,0.00539,0.99536,-0.09243,-0.00499,0.0061,0.99569,-0.09111,-0.00487,0.00664,0.99581,-0.091,-0.00487,0.00695,0.99582,-0.09178,-0.00491,0.00744,0.99574,-0.09265,-0.00496,0.00783,0.99566,-0.09343,-0.005,0.00812,0.99558,-0.09404,-0.00503,0.00832,0.99552,-0.09443,-0.00505,0.00842,0.99548,-0.09466,-0.00506,0.0084,0.99546],"Head":[-0.19905,0.00573,-0.01209,0.9799,-0.19773,0.00221,-0.01124,0.98019,-0.19604,-0.00451,-0.00973,0.98054,-0.19475,-0.01362,-0.00842,0.98072,-0.19347,-0.02534,-0.00824,0.98074,-0.19076,-0.03864,-0.00924,0.98083,-0.1857,-0.05206,-0.00982,0.98118,-0.17985,-0.06041,-0.00909,0.9818,-0.17629,-0.05602,-0.00778,0.98271,-0.17601,-0.03379,-0.0068,0.98378,-0.17532,-0.0003,-0.00407,0.9845,-0.17012,0.03066,0.00271,0.98494,-0.16005,0.05012,0.01305,0.98575,-0.14814,0.06099,0.02461,0.98678,-0.13723,0.07017,0.03678,0.98737,-0.12633,0.07837,0.04955,0.98765,-0.11124,0.08371,0.05811,0.98855,-0.08864,0.08724,0.05557,0.99068,-0.06092,0.09149,0.03896,0.99318,-0.03718,0.09337,0.01164,0.99487,-0.02469,0.08738,-0.02043,0.99566,-0.02393,0.07394,-0.052,0.99562,-0.02882,0.05937,-0.07743,0.99481,-0.03272,0.04606,-0.08999,0.99434,-0.03536,0.03111,-0.08293,0.99544,-0.04089,0.01328,-0.05678,0.99746,-0.05424,-0.005,-0.02157,0.99828,-0.07301,-0.02245,0.01212,0.99701,-0.09529,-0.03726,0.03773,0.99404,-0.12297,-0.04625,0.05301,0.98991,-0.15294,-0.04464,0.05567,0.98566,-0.17225,-0.03793,0.04757,0.98317,-0.17207,-0.03334,0.03524,0.98389,-0.15869,-0.03464,0.02596,0.98638,-0.14455,-0.03761,0.02192,0.98854,-0.13407,-0.04268,0.02199,0.98981,-0.1272,-0.0556,0.02257,0.99006,-0.12623,-0.0757,0.02132,0.98888,-0.13127,-0.08908,0.01629,0.9872,-0.13905,-0.08439,0.00788,0.98665,-0.14617,-0.07016,0.00133,0.98677,-0.1525,-0.06536,0.00222,0.98614,-0.15893,-0.08075,0.01116,0.98392,-0.167,-0.11034,0.02089,0.97954,-0.17858,-0.13893,0.02288,0.9738,-0.19391,-0.15158,0.01387,0.96914,-0.20915,-0.14674,-0.00108,0.96681,-0.21974,-0.1402,-0.01144,0.96536,-0.22547,-0.14402,-0.01346,0.96345,-0.22828,-0.15799,-0.00907,0.96065,-0.23049,-0.16745,-0.00559,0.95854,-0.23232,-0.1677,-0.00509,0.95806,-0.23347,-0.15801,-0.00827,0.9594,-0.23351,-0.14303,-0.01308,0.96169,-0.23214,-0.1286,-0.01635,0.96401,-0.22962,-0.1161,-0.01609,0.9662,-0.22674,-0.09704,-0.01226,0.96903,-0.22274,-0.06534,-0.00535,0.97267,-0.2168,-0.02557,0.00428,0.97587,-0.20892,0.00305,0.01443,0.97782,-0.20139,0.00906,0.02083,0.97925,-0.1957,-0.00601,0.021,0.98042,-0.19056,-0.02762,0.01576,0.98116,-0.18346,-0.04036,0.00763,0.98217,-0.17191,-0.03802,-0.00068,0.98438,-0.15485,-0.02515,-0.00765,0.98759,-0.13281,-0.01058,-0.01306,0.991,-0.10842,-0.00112,-0.01727,0.99395,-0.08638,0.00046,-0.02138,0.99603,-0.07144,-0.00492,-0.02596,0.99709,-0.06795,-0.01145,-0.03083,0.99715,-0.07383,-0.0161,-0.03545,0.99651,-0.08592,-0.01737,-0.03923,0.99538,-0.09928,-0.01779,-0.04224,0.994,-0.11467,-0.01508,-0.04351,0.99234,-0.13076,-0.00932,-0.04249,0.99046,-0.14487,-0.00313,-0.03965,0.98865,-0.1553,0.00087,-0.03609,0.98721,-0.16271,0.00236,-0.0326,0.98613,-0.17438,0.00383,-0.02629,0.98432,-0.18347,0.00476,-0.02115,0.98279,-0.19033,0.00535,-0.01718,0.98155,-0.19518,0.00572,-0.01437,0.98065,-0.1981,0.00588,-0.01269,0.98008,-0.19905,0.00573,-0.01209,0.9799],"Left Arm":[0.32181,0.01387,-0.09304,0.94212,0.32193,0.01515,-0.09875,0.94148,0.32267,0.01784,-0.11125,0.93978,0.3228,0.02055,-0.12978,0.9373,0.32019,0.02078,-0.15357,0.93459,0.31272,0.0149,-0.17651,0.93318,0.30245,0.00277,-0.19217,0.93359,0.29277,-0.01147,-0.19389,0.93625,0.2861,-0.02009,-0.17899,0.94112,0.28166,-0.01694,-0.15071,0.94745,0.27773,-0.00258,-0.11797,0.95339,0.2726,0.01534,-0.0894,0.95784,0.26577,0.03043,-0.06995,0.96101,0.25956,0.04442,-0.06049,0.96281,0.25823,0.06305,-0.06007,0.96215,0.26653,0.08624,-0.06677,0.95763,0.28777,0.10729,-0.07863,0.94842,0.32365,0.1219,-0.09495,0.93348,0.37546,0.13218,-0.11264,0.91042,0.44256,0.14093,-0.12579,0.87662,0.52132,0.14548,-0.12819,0.83104,0.6002,0.13817,-0.11909,0.77877,0.66247,0.11297,-0.0998,0.73377,0.69922,0.07727,-0.07207,0.70705,0.71539,0.04547,-0.04352,0.69588,0.72288,0.04214,-0.03425,0.68884,0.72078,0.08548,-0.06998,0.68431,0.66749,0.16026,-0.17104,0.70677,0.53769,0.19468,-0.29206,0.76661,0.38211,0.18122,-0.36927,0.82752,0.28626,0.14749,-0.37569,0.869,0.27186,0.14398,-0.35128,0.88429,0.28002,0.14363,-0.33441,0.88833,0.28937,0.13673,-0.3357,0.88593,0.30246,0.13303,-0.34718,0.87766,0.32584,0.13913,-0.35926,0.86337,0.34397,0.1457,-0.36863,0.85121,0.34832,0.14434,-0.37765,0.8457,0.34293,0.13526,-0.386,0.84564,0.33776,0.12392,-0.38937,0.84791,0.33796,0.11511,-0.38505,0.85104,0.3424,0.11184,-0.37445,0.85443,0.34487,0.11276,-0.36288,0.8583,0.33995,0.11221,-0.35559,0.86336,0.32703,0.10419,-0.35458,0.86975,0.3111,0.0884,-0.3588,0.87559,0.29933,0.07104,-0.36531,0.87858,0.29559,0.05997,-0.36997,0.87872,0.29806,0.05613,-0.37135,0.87756,0.30274,0.05719,-0.37019,0.87638,0.30748,0.06012,-0.37022,0.87452,0.30744,0.06198,-0.37186,0.8737,0.29276,0.05621,-0.37463,0.87794,0.25854,0.04005,-0.37436,0.88961,0.20955,0.0177,-0.36363,0.90749,0.15948,-0.00032,-0.33851,0.92735,0.12212,-0.00195,-0.30136,0.94565,0.10256,0.01597,-0.26353,0.95905,0.09726,0.04659,-0.23407,0.96622,0.09494,0.07159,-0.2185,0.96856,0.0937,0.07839,-0.21612,0.96869,0.10167,0.06738,-0.22202,0.96738,0.12864,0.04975,-0.22922,0.96355,0.17422,0.03768,-0.23152,0.95636,0.22917,0.03696,-0.22761,0.94568,0.28253,0.04528,-0.21908,0.93281,0.3272,0.05566,-0.20812,0.92007,0.36115,0.0616,-0.19504,0.9098,0.38479,0.05863,-0.17986,0.90341,0.3998,0.04714,-0.16171,0.90099,0.40445,0.03095,-0.13972,0.90329,0.4006,0.01422,-0.11479,0.90892,0.38958,-0.00037,-0.0894,0.91664,0.37625,-0.01214,-0.06669,0.92403,0.36035,-0.01856,-0.04867,0.93136,0.34468,-0.01902,-0.03769,0.93777,0.333,-0.01566,-0.03449,0.94216,0.32711,-0.01148,-0.03731,0.94418,0.3253,-0.00808,-0.04314,0.94459,0.32396,-0.00158,-0.05715,0.94434,0.32324,0.00382,-0.06938,0.94376,0.32275,0.00809,-0.07934,0.94312,0.32232,0.01122,-0.08668,0.94259,0.32195,0.01315,-0.09125,0.94226,0.32181,0.01387,-0.09304,0.94212],"Right Arm":[0.37371,-0.02273,0.00816,0.92723,0.37007,-0.02339,0.00943,0.92866,0.36527,-0.02473,0.01057,0.93051,0.36183,-0.02725,0.00969,0.9318,0.35979,-0.0323,0.00613,0.93246,0.3575,-0.04136,0.00143,0.933,0.352,-0.0547,-8e-05,0.9344,0.34004,-0.06904,0.00551,0.93786,0.31885,-0.07717,0.01972,0.94445,0.28787,-0.07148,0.04009,0.95416,0.25024,-0.05161,0.06139,0.96486,0.21198,-0.02568,0.07737,0.97387,0.18008,-0.00195,0.08429,0.98003,0.15945,0.01926,0.08307,0.98352,0.15353,0.04198,0.07691,0.98425,0.16369,0.06534,0.06729,0.98204,0.1881,0.08322,0.05434,0.97711,0.22322,0.0914,0.04019,0.96964,0.26492,0.09124,0.02992,0.95948,0.31124,0.08599,0.02508,0.9461,0.36074,0.07718,0.02138,0.92922,0.41215,0.06403,0.01348,0.90876,0.46253,0.04508,0.00471,0.88544,0.50805,0.02025,0.00811,0.86105,0.54577,-0.01527,0.03659,0.83699,0.56585,-0.06486,0.09631,0.81629,0.55832,-0.12864,0.18527,0.79838,0.50479,-0.18136,0.29095,0.79224,0.39823,-0.1866,0.38601,0.81092,0.26591,-0.13937,0.43396,0.84944,0.15358,-0.07021,0.4314,0.88622,0.0962,-0.02221,0.40835,0.90747,0.08689,-0.01053,0.39742,0.91345,0.10273,-0.02701,0.40298,0.90903,0.1251,-0.05536,0.41832,0.89794,0.14147,-0.07936,0.43897,0.88374,0.15168,-0.09663,0.45969,0.86968,0.16038,-0.11209,0.47297,0.85908,0.16609,-0.12552,0.47526,0.85486,0.16279,-0.13207,0.46868,0.85813,0.15082,-0.13087,0.45915,0.86563,0.13838,-0.12489,0.45118,0.87275,0.134,-0.118,0.44712,0.87647,0.14025,-0.11424,0.44511,0.87702,0.15134,-0.11608,0.44022,0.8774,0.15814,-0.12196,0.4285,0.8812,0.15444,-0.12683,0.41092,0.8895,0.14363,-0.12716,0.39444,0.89868,0.13161,-0.12383,0.38222,0.90623,0.12329,-0.11956,0.37426,0.91128,0.11971,-0.1167,0.36712,0.91503,0.12054,-0.11516,0.35884,0.91839,0.1228,-0.11388,0.34454,0.92371,0.12265,-0.11063,0.32298,0.93188,0.11785,-0.10338,0.29858,0.94142,0.10975,-0.09102,0.27847,0.9498,0.1,-0.06953,0.27016,0.95508,0.0942,-0.03913,0.2736,0.95642,0.10057,-0.0067,0.28435,0.95341,0.12578,0.01317,0.28939,0.94882,0.16663,0.01062,0.28184,0.94482,0.21211,-0.01283,0.26392,0.94085,0.2508,-0.04531,0.2438,0.93574,0.2793,-0.07291,0.22588,0.93041,0.29977,-0.08648,0.2084,0.92695,0.31708,-0.08596,0.18841,0.92551,0.33607,-0.07795,0.16516,0.92396,0.3588,-0.06959,0.14039,0.92017,0.38366,-0.06565,0.11576,0.91384,0.40455,-0.06591,0.09373,0.90731,0.41117,-0.0669,0.07744,0.9058,0.40315,-0.06648,0.06704,0.91025,0.38384,-0.06394,0.06069,0.91918,0.36278,-0.06067,0.05497,0.92827,0.34016,-0.05419,0.04786,0.93758,0.31993,-0.04523,0.03993,0.94552,0.30815,-0.03692,0.03265,0.95006,0.30698,-0.03198,0.02749,0.95078,0.31371,-0.03008,0.02377,0.94874,0.33104,-0.02768,0.01838,0.94303,0.34635,-0.02592,0.0143,0.93764,0.35866,-0.0246,0.01138,0.93308,0.36738,-0.0236,0.00946,0.92972,0.37233,-0.02294,0.00842,0.92778,0.37371,-0.02273,0.00816,0.92723],"Left Leg":[0.16489,0.02755,-0.14625,0.97502,0.16665,0.02806,-0.14542,0.97483,0.16963,0.02881,-0.14366,0.97455,0.17273,0.02934,-0.14178,0.97427,0.17484,0.02932,-0.14066,0.97406,0.17367,0.02855,-0.1411,0.97423,0.16632,0.02713,-0.14215,0.97539,0.15025,0.02499,-0.14205,0.97807,0.12526,0.02169,-0.1405,0.98189,0.09479,0.0172,-0.13875,0.98563,0.06462,0.01253,-0.1378,0.98827,0.03961,0.00905,-0.13768,0.98964,0.02151,0.00705,-0.13732,0.99027,0.00978,0.00595,-0.13524,0.99075,0.0035,0.00504,-0.12935,0.99158,0.00374,0.00444,-0.11957,0.99281,0.01255,0.00473,-0.10904,0.99395,0.03121,0.00646,-0.10186,0.99429,0.05787,0.00953,-0.10087,0.99317,0.08873,0.01322,-0.10698,0.99021,0.12097,0.01708,-0.12113,0.98509,0.15309,0.02226,-0.14388,0.97743,0.18347,0.03251,-0.17107,0.96748,0.21046,0.0514,-0.19315,0.95695,0.23421,0.07568,-0.20159,0.94804,0.28145,0.09062,-0.21139,0.93161,0.34665,0.08264,-0.20333,0.91196,0.37519,0.06421,-0.17842,0.90735,0.39435,0.0428,-0.15934,0.90403,0.41002,0.02688,-0.15141,0.89902,0.42795,0.02149,-0.15307,0.89049,0.45245,0.02755,-0.15444,0.87789,0.48224,0.03958,-0.14905,0.86236,0.51191,0.04888,-0.13993,0.84616,0.53643,0.05218,-0.13315,0.83174,0.55405,0.05305,-0.12935,0.82066,0.56642,0.05573,-0.12666,0.81241,0.57465,0.06089,-0.12536,0.80644,0.57989,0.06728,-0.12576,0.80211,0.58297,0.07305,-0.1264,0.79927,0.58392,0.07518,-0.12605,0.79843,0.5822,0.07191,-0.12645,0.79993,0.57885,0.06606,-0.13015,0.80226,0.5763,0.06385,-0.13694,0.80315,0.57675,0.06991,-0.14403,0.80108,0.58013,0.08303,-0.14843,0.79657,0.58498,0.09748,-0.1496,0.79115,0.58924,0.10657,-0.14932,0.78686,0.59222,0.10935,-0.1493,0.78424,0.59468,0.10861,-0.15024,0.7823,0.59885,0.10949,-0.15172,0.7787,0.60509,0.1134,-0.15368,0.77291,0.61219,0.12019,-0.15606,0.76578,0.61759,0.12732,-0.15801,0.75987,0.61898,0.13136,-0.1582,0.75801,0.61531,0.13029,-0.15583,0.76166,0.6034,0.12206,-0.14977,0.77368,0.58161,0.10903,-0.14072,0.79375,0.54824,0.09312,-0.13191,0.82059,0.50647,0.07866,-0.12919,0.84889,0.46254,0.06744,-0.13373,0.87385,0.42341,0.06059,-0.13946,0.89309,0.39253,0.05725,-0.13967,0.90727,0.36784,0.05552,-0.13441,0.91845,0.34496,0.05329,-0.13005,0.92803,0.30254,0.05245,-0.12996,0.94278,0.26778,0.04979,-0.13361,0.95287,0.25371,0.04512,-0.13814,0.9563,0.24116,0.04227,-0.14075,0.95929,0.2297,0.04116,-0.14118,0.96209,0.21945,0.04093,-0.14062,0.96457,0.2101,0.04091,-0.13985,0.96676,0.2016,0.04072,-0.13948,0.96863,0.19353,0.04022,-0.13928,0.97033,0.18612,0.03884,-0.13966,0.97177,0.18027,0.03668,-0.1406,0.97282,0.17668,0.0344,-0.14176,0.9734,0.17519,0.03264,-0.14271,0.97359,0.17488,0.03143,-0.14339,0.97359,0.17529,0.02952,-0.14435,0.97343,0.17585,0.02804,-0.14516,0.97325,0.1764,0.02694,-0.14582,0.97308,0.17683,0.02618,-0.14635,0.97295,0.17712,0.02576,-0.14671,0.97285,0.1773,0.02567,-0.14692,0.97279],"Right Leg":[0.06663,-0.0134,0.13196,0.98892,0.06849,-0.01358,0.1327,0.98869,0.07168,-0.01401,0.13432,0.98824,0.07498,-0.01467,0.13609,0.98775,0.07719,-0.01537,0.13716,0.98742,0.07584,-0.0154,0.13685,0.98757,0.06798,-0.01376,0.13613,0.98826,0.05098,-0.00992,0.13675,0.98924,0.02445,-0.0041,0.13885,0.99,-0.00806,0.00308,0.14096,0.98998,-0.04031,0.01093,0.14189,0.989,-0.067,0.01847,0.14172,0.98746,-0.08631,0.02477,0.14177,0.98582,-0.09881,0.02961,0.14366,0.98424,-0.10546,0.03355,0.14943,0.98256,-0.10533,0.03636,0.15929,0.98092,-0.0965,0.03648,0.17036,0.97997,-0.07743,0.03268,0.17856,0.98033,-0.04976,0.02533,0.18065,0.98196,-0.01747,0.01601,0.17515,0.98426,0.01608,0.00613,0.16092,0.98682,0.04905,-0.00247,0.13749,0.98928,0.07997,-0.00713,0.10928,0.99076,0.10734,-0.00689,0.08536,0.99053,0.13085,-0.00443,0.07376,0.98865,0.15053,-0.00441,0.07605,0.98567,0.16732,-0.00937,0.08849,0.98188,0.18226,-0.01888,0.1074,0.97718,0.19742,-0.03164,0.12552,0.97174,0.21518,-0.0461,0.13468,0.96614,0.23605,-0.05759,0.13291,0.96088,0.26067,-0.06226,0.12898,0.95475,0.28692,-0.06124,0.1303,0.94707,0.31081,-0.06032,0.13569,0.9388,0.32948,-0.06278,0.14026,0.93157,0.34322,-0.06659,0.14344,0.92585,0.35453,-0.06886,0.14631,0.92096,0.36333,-0.0683,0.14756,0.91736,0.36931,-0.06543,0.14625,0.91539,0.37265,-0.06162,0.14381,0.91469,0.37357,-0.05977,0.1428,0.91459,0.37209,-0.06206,0.14221,0.91514,0.36968,-0.06748,0.13922,0.91619,0.36847,-0.07115,0.13261,0.91738,0.36938,-0.06864,0.1246,0.91833,0.37167,-0.06006,0.11804,0.91887,0.37437,-0.04994,0.11402,0.91888,0.37656,-0.04402,0.11214,0.91853,0.37801,-0.04332,0.11141,0.91805,0.37932,-0.04587,0.11081,0.91746,0.38236,-0.04779,0.109,0.91632,0.38747,-0.04787,0.10551,0.91457,0.39358,-0.04574,0.10048,0.91264,0.39838,-0.04243,0.09549,0.91125,0.39986,-0.03972,0.09287,0.91099,0.39698,-0.03877,0.09397,0.91218,0.38631,-0.03985,0.10017,0.91605,0.36678,-0.04126,0.11028,0.92283,0.33803,-0.04249,0.12078,0.93239,0.30501,-0.04356,0.12611,0.94296,0.27316,-0.04447,0.12459,0.95283,0.24632,-0.04368,0.12113,0.9606,0.22456,-0.04026,0.12083,0.9661,0.20547,-0.0354,0.12404,0.97013,0.18721,-0.03148,0.12651,0.97363,0.16968,-0.02958,0.12544,0.97704,0.1535,-0.02887,0.1217,0.9802,0.13926,-0.02795,0.11802,0.9828,0.12698,-0.02603,0.11615,0.98474,0.11602,-0.02318,0.11633,0.98614,0.10622,-0.02009,0.11737,0.98719,0.0972,-0.01718,0.11855,0.98803,0.08893,-0.0147,0.11927,0.98876,0.08101,-0.01256,0.11979,0.98941,0.07364,-0.01106,0.11974,0.99001,0.06777,-0.01033,0.11914,0.99051,0.06422,-0.0102,0.11829,0.99085,0.06287,-0.01031,0.11759,0.99102,0.06275,-0.01044,0.1171,0.99108,0.06355,-0.0108,0.11647,0.9911,0.06443,-0.0111,0.11592,0.9911,0.06522,-0.01134,0.11546,0.9911,0.06583,-0.01152,0.11508,0.99111,0.06623,-0.01161,0.11479,0.99111,0.06645,-0.01164,0.11461,0.99112]},"root":null}],"set":[],"shots":[],"cues":[],"events":[],"tension":[]};
+
+/* ---------------------------------------------------------------- maths -- */
+const IDENT = [1,0,0, 0,1,0, 0,0,1];
+
+function matMul(a, b) {
+  const o = new Array(9);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+    o[r*3+c] = a[r*3]*b[c] + a[r*3+1]*b[3+c] + a[r*3+2]*b[6+c];
+  }
+  return o;
+}
+function matVec(m, v) {
+  return [
+    m[0]*v[0] + m[1]*v[1] + m[2]*v[2],
+    m[3]*v[0] + m[4]*v[1] + m[5]*v[2],
+    m[6]*v[0] + m[7]*v[1] + m[8]*v[2],
+  ];
+}
+function add(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+function sub(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+function scale(a, k) { return [a[0]*k, a[1]*k, a[2]*k]; }
+function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function cross(a, b) {
+  return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+}
+function norm(a) {
+  const n = Math.hypot(a[0], a[1], a[2]) || 1;
+  return [a[0]/n, a[1]/n, a[2]/n];
+}
+// Quaternion xyzw to a rotation matrix, matching linen.math3d.quat_to_mat.
+function quatToMat(x, y, z, w) {
+  const xx = x*x, yy = y*y, zz = z*z;
+  const xy = x*y, xz = x*z, yz = y*z, wx = w*x, wy = w*y, wz = w*z;
+  return [
+    1-2*(yy+zz),   2*(xy-wz),   2*(xz+wy),
+      2*(xy+wz), 1-2*(xx+zz),   2*(yz-wx),
+      2*(xz-wy),   2*(yz+wx), 1-2*(xx+yy),
+  ];
+}
+function yawMat(deg) {
+  const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  // Turns the rig's -Z forward onto the heading the Studio script gives it.
+  return [c, 0, s, 0, 1, 0, -s, 0, c];
+}
+
+/* ------------------------------------------------- forward kinematics ---- */
+// The same chain the exporter and the Studio player walk: a joint frame at the
+// pivot that the pose rotates, then the part's centre offset inside it.
+function poseAt(rig, actor, frame) {
+  const placed = {};
+  for (const part of rig.parts) {
+    const track = actor.rotations[part.name];
+    let local = IDENT;
+    if (track) {
+      const i = frame * 4;
+      local = quatToMat(track[i], track[i+1], track[i+2], track[i+3]);
+    }
+    if (part.parent === null) {
+      let root = [0, 0, 0];
+      if (actor.root) root = [actor.root[frame*3], actor.root[frame*3+1], actor.root[frame*3+2]];
+      placed[part.name] = { p: root, r: local };
+      continue;
+    }
+    const parent = placed[part.parent];
+    const joint = add(parent.p, matVec(parent.r, part.pivot));
+    const r = matMul(parent.r, local);
+    placed[part.name] = { p: add(joint, matVec(r, part.offsetFromPivot)), r: r };
+  }
+  return placed;
+}
+
+/* ------------------------------------------------------------ geometry -- */
+const CORNERS = [
+  [-.5,-.5,-.5], [.5,-.5,-.5], [.5,.5,-.5], [-.5,.5,-.5],
+  [-.5,-.5,.5], [.5,-.5,.5], [.5,.5,.5], [-.5,.5,.5],
+];
+const FACES = [
+  [0,1,2,3], [5,4,7,6], [4,0,3,7], [1,5,6,2], [3,2,6,7], [4,5,1,0],
+];
+const LIGHT = norm([0.4, 0.85, 0.45]);
+
+const PALETTE = [
+  [110, 168, 254], [232, 143, 106], [143, 217, 143],
+  [201, 154, 232], [232, 184, 75], [127, 209, 232],
+];
+
+/* -------------------------------------------------------------- camera -- */
+const cam = { yaw: 0.55, pitch: 0.22, dist: 16, target: [0, 3, -2], fov: 45 };
+
+function orbitEye() {
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  return add(cam.target, [
+    cam.dist * cp * Math.sin(cam.yaw),
+    cam.dist * sp,
+    cam.dist * cp * Math.cos(cam.yaw),
+  ]);
+}
+
+function basis(eye, target) {
+  const f = norm(sub(target, eye));
+  let r = cross(f, [0, 1, 0]);
+  if (Math.hypot(r[0], r[1], r[2]) < 1e-6) r = [1, 0, 0];
+  r = norm(r);
+  return { f: f, r: r, u: cross(r, f) };
+}
+
+/* --------------------------------------------------------------- state -- */
+const stage = document.getElementById('stage');
+const ctx = stage.getContext('2d');
+const timeline = document.getElementById('timeline');
+const tctx = timeline.getContext('2d');
+
+const state = {
+  time: 0, playing: false, loop: true, speed: 1,
+  director: false, showSet: true, showGrid: true,
+  //: Index into DATA.skins, or -1 for the plain boxes a Block Rig really is.
+  skin: DATA.skins.length ? 0 : -1,
+};
+const frames = Math.max(DATA.frameCount, 1);
+const duration = DATA.duration || (frames - 1) / (DATA.fps || 30);
+
+document.getElementById('summary').textContent =
+  `${DATA.actors.length} acteur(s) · ${duration.toFixed(2)} s · ${DATA.fps} fps` +
+  (DATA.cues.length ? ` · ${DATA.cues.length} cues` : '') +
+  (DATA.events.length ? ` · ${DATA.events.length} événements` : '');
+
+// Frame the cast on load, so nothing opens off-screen.
+(function frameCast() {
+  if (!DATA.actors.length) return;
+  let lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  for (const a of DATA.actors) for (let i = 0; i < 3; i++) {
+    lo[i] = Math.min(lo[i], a.position[i]); hi[i] = Math.max(hi[i], a.position[i]);
+  }
+  cam.target = [(lo[0]+hi[0])/2, (lo[1]+hi[1])/2 + 1, (lo[2]+hi[2])/2];
+  const span = Math.max(hi[0]-lo[0], hi[2]-lo[2], 4);
+  cam.dist = span + 12;
+})();
+
+/* -------------------------------------------------------------- render -- */
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  for (const [c, h] of [[stage, stage.clientHeight], [timeline, timeline.clientHeight]]) {
+    c.width = Math.max(c.clientWidth * dpr, 1);
+    c.height = Math.max(h * dpr, 1);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', () => { resize(); draw(); });
+
+function activeShot(t) {
+  if (!DATA.shots.length) return null;
+  let current = null;
+  for (const e of DATA.events) {
+    if (e.kind !== 'camera' || e.t > t) continue;
+    const shot = DATA.shots.find(s => e.label === 'plan ' + s.id);
+    if (shot) current = { shot: shot, at: e.t };
+  }
+  return current || { shot: DATA.shots[0], at: 0 };
+}
+
+function subjectPosition(name, placed) {
+  const actor = DATA.actors.find(a => a.name === name);
+  if (actor) {
+    const p = placed[actor.name];
+    const head = p && (p['Head'] || p['UpperTorso'] || p['Torso']);
+    if (head) return worldOf(actor, head.p);
+    return [actor.position[0], actor.position[1] + 1.5, actor.position[2]];
+  }
+  const piece = DATA.set.find(s => s.name === name);
+  if (piece) return piece.position;
+  return cam.target;
+}
+
+function worldOf(actor, local) {
+  return add(actor.position, matVec(yawMat(actor.yaw), local));
+}
+
+function draw() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#14161a';
+  ctx.fillRect(0, 0, w, h);
+
+  const frame = Math.min(Math.round(state.time * DATA.fps), frames - 1);
+  const placed = {};
+  for (const actor of DATA.actors) {
+    placed[actor.name] = poseAt(DATA.rigs[actor.rig], actor, frame);
+  }
+
+  let eye, target, fov = cam.fov;
+  if (state.director && DATA.shots.length) {
+    const cut = activeShot(state.time);
+    eye = cut.shot.position.slice();
+    const drift = cut.shot.drift || [0, 0, 0];
+    // Every shot drifts, exactly as the Studio player tweens it.
+    const k = Math.min((state.time - cut.at) / 4, 1);
+    eye = add(eye, scale(drift, k));
+    target = subjectPosition(cut.shot.lookAt, placed);
+    fov = cut.shot.fov;
+  } else {
+    eye = orbitEye();
+    target = cam.target;
+  }
+
+  const b = basis(eye, target);
+  const focal = (h / 2) / Math.tan(fov * Math.PI / 360);
+  const quads = [];
+
+  function project(p) {
+    const d = sub(p, eye);
+    const z = dot(d, b.f);
+    if (z < 0.2) return null;
+    return { x: w/2 + dot(d, b.r) * focal / z, y: h/2 - dot(d, b.u) * focal / z, z: z };
+  }
+
+  // The floor is painted in its own pass, before everything else. Sorting it
+  // with the rest by centroid depth puts its near edge in front of the actors
+  // standing on it — a big quad's centroid can be nearer than a small object
+  // genuinely in front of it. Nothing is ever under the ground, so this is
+  // correct by construction rather than a fudge.
+  const ground = [];
+
+  function box(centre, rot, size, rgb, alpha, into) {
+    const bucket = into || quads;
+    const world = CORNERS.map(c =>
+      add(centre, matVec(rot, [c[0]*size[0], c[1]*size[1], c[2]*size[2]])));
+    const screen = world.map(project);
+    for (const face of FACES) {
+      const pts = face.map(i => screen[i]);
+      if (pts.some(p => p === null)) continue;
+      const a = world[face[0]], bb = world[face[1]], cc = world[face[2]];
+      const n = norm(cross(sub(bb, a), sub(cc, bb)));
+      // Back-face cull, so interior faces never paint over the silhouette.
+      if (dot(n, sub(a, eye)) > 0) continue;
+      const shade = 0.42 + 0.58 * Math.max(dot(n, LIGHT), 0);
+      bucket.push({
+        pts: pts,
+        depth: (pts[0].z + pts[1].z + pts[2].z + pts[3].z) / 4,
+        fill: `rgba(${Math.round(rgb[0]*shade)},${Math.round(rgb[1]*shade)},` +
+              `${Math.round(rgb[2]*shade)},${alpha})`,
+      });
+    }
+  }
+
+  if (state.showSet) {
+    for (const piece of DATA.set) {
+      const floor = piece.kind === 'sol';
+      box(piece.position, IDENT, piece.size, [92, 98, 110], 0.9, floor ? ground : quads);
+    }
+  }
+  ground.sort((p, q) => q.depth - p.depth);
+  paint(ground);
+
+  if (state.showGrid) drawGrid(project);
+
+  // A skin replaces a part's box with real geometry. Its vertices are already
+  // in that part's local space, scaled into that part's box, so it rides the
+  // exact same transform the box does and cannot come apart at the joints.
+  function skinned(centre, rot, geometry, rgb) {
+    const verts = geometry.vertices, tris = geometry.triangles;
+    const world = new Array(verts.length / 3);
+    for (let i = 0; i < world.length; i++) {
+      world[i] = add(centre, matVec(rot, [verts[i*3], verts[i*3+1], verts[i*3+2]]));
+    }
+    const screen = world.map(project);
+    for (let t = 0; t < tris.length; t += 3) {
+      const a = screen[tris[t]], b2 = screen[tris[t+1]], c2 = screen[tris[t+2]];
+      if (!a || !b2 || !c2) continue;
+      const wa = world[tris[t]], wb = world[tris[t+1]], wc = world[tris[t+2]];
+      const n = norm(cross(sub(wb, wa), sub(wc, wb)));
+      if (dot(n, sub(wa, eye)) > 0) continue;
+      const shade = 0.42 + 0.58 * Math.max(dot(n, LIGHT), 0);
+      quads.push({
+        pts: [a, b2, c2],
+        depth: (a.z + b2.z + c2.z) / 3,
+        fill: `rgb(${Math.round(rgb[0]*shade)},${Math.round(rgb[1]*shade)},` +
+              `${Math.round(rgb[2]*shade)})`,
+      });
+    }
+  }
+
+  const skin = DATA.skins[state.skin] || null;
+
+  DATA.actors.forEach((actor, index) => {
+    const rgb = PALETTE[index % PALETTE.length];
+    const rig = DATA.rigs[actor.rig];
+    const yaw = yawMat(actor.yaw);
+    for (const part of rig.parts) {
+      if (part.parent === null) continue;  // HumanoidRootPart is invisible in game
+      const local = placed[actor.name][part.name];
+      const centre = add(actor.position, matVec(yaw, local.p));
+      const rot = matMul(yaw, local.r);
+      const geometry = skin && skin.rig === actor.rig ? skin.parts[part.name] : null;
+      if (geometry) skinned(centre, rot, geometry, rgb);
+      else box(centre, rot, part.size, rgb, 1);
+    }
+  });
+
+  quads.sort((p, q) => q.depth - p.depth);
+  paint(quads);
+
+  // Name every actor and every set piece, so the view matches the build sheet.
+  ctx.font = '12px ui-sans-serif, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  DATA.actors.forEach((actor, index) => {
+    const p = placed[actor.name]['Head'] || placed[actor.name]['Torso'];
+    if (!p) return;
+    const s = project(add(worldOf(actor, p.p), [0, 1.2, 0]));
+    if (!s) return;
+    const rgb = PALETTE[index % PALETTE.length];
+    ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    ctx.fillText(actor.name, s.x, s.y);
+  });
+  if (state.showSet) {
+    ctx.fillStyle = '#8b93a1';
+    for (const piece of DATA.set) {
+      const s = project(add(piece.position, [0, piece.size[1] / 2 + 0.6, 0]));
+      if (s) ctx.fillText(piece.name, s.x, s.y);
+    }
+  }
+  ctx.textAlign = 'left';
+
+  drawHud(frame);
+  drawTimeline();
+}
+
+function paint(quads) {
+  for (const quad of quads) {
+    ctx.beginPath();
+    ctx.moveTo(quad.pts[0].x, quad.pts[0].y);
+    for (let i = 1; i < quad.pts.length; i++) ctx.lineTo(quad.pts[i].x, quad.pts[i].y);
+    ctx.closePath();
+    ctx.fillStyle = quad.fill;
+    ctx.fill();
+  }
+}
+
+function drawGrid(project) {
+  const y = groundLevel();
+  const half = 20, step = 4;
+  ctx.strokeStyle = 'rgba(120,132,150,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = -half; i <= half; i += step) {
+    for (const seg of [
+      [[i, y, -half], [i, y, half]],
+      [[-half, y, i], [half, y, i]],
+    ]) {
+      const a = project(seg[0]), b = project(seg[1]);
+      if (!a || !b) continue;
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+    }
+  }
+  ctx.stroke();
+}
+
+function groundLevel() {
+  const floor = DATA.set.find(s => s.kind === 'sol');
+  if (floor) return floor.position[1] + floor.size[1] / 2;
+  return 0;
+}
+
+function drawHud(frame) {
+  const hud = document.getElementById('hud');
+  const cut = state.director ? activeShot(state.time) : null;
+  hud.innerHTML =
+    `frame ${frame} / ${frames - 1} &nbsp; ${state.time.toFixed(2)} s` +
+    (cut ? `<br>plan « ${cut.shot.id} » · ${cut.shot.fov}° · vise ${cut.shot.lookAt}` : '') +
+    (DATA.tension.length ? `<br>tension ${tensionAt(state.time).toFixed(2)}` : '');
+
+  // Anything that fired in the last third of a second, newest first.
+  const recent = DATA.events
+    .filter(e => e.t <= state.time && state.time - e.t < 0.35)
+    .slice(-6).reverse();
+  document.getElementById('fired').innerHTML = recent.map(e => {
+    const fade = 1 - (state.time - e.t) / 0.35;
+    const colour = LANE_COLOURS[e.kind] || '#9aa4b2';
+    const who = e.actor ? `${e.actor} · ` : '';
+    return `<div style="color:${colour};opacity:${(0.35 + 0.65*fade).toFixed(2)}">` +
+           `${who}${escapeHtml(e.label)}</div>`;
+  }).join('');
+}
+
+const LANE_COLOURS = {"camera": "#e8b84b", "line": "#7fd1e8", "face": "#c99ae8", "prop": "#8fd98f", "vfx": "#e88f6a", "sound": "#9aa4b2", "spot": "#9aa4b2"};
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+function tensionAt(t) {
+  const curve = DATA.tension;
+  if (!curve.length) return 0;
+  if (t <= curve[0][0]) return curve[0][1];
+  for (let i = 0; i < curve.length - 1; i++) {
+    if (t < curve[i+1][0]) {
+      const span = curve[i+1][0] - curve[i][0] || 1;
+      const k = (t - curve[i][0]) / span;
+      return curve[i][1] + (curve[i+1][1] - curve[i][1]) * k;
+    }
+  }
+  return curve[curve.length - 1][1];
+}
+
+/* ------------------------------------------------------------ timeline -- */
+function drawTimeline() {
+  const w = timeline.clientWidth, h = timeline.clientHeight;
+  tctx.clearRect(0, 0, w, h);
+  const pad = 14;
+  const span = Math.max(duration, 0.001);
+  const x = t => pad + (w - 2*pad) * (t / span);
+
+  // Tension behind everything: the shape of the scene at a glance.
+  if (DATA.tension.length) {
+    tctx.beginPath();
+    tctx.moveTo(x(0), h - 4);
+    for (const [t, v] of DATA.tension) tctx.lineTo(x(t), h - 4 - v * (h - 30));
+    tctx.lineTo(x(span), h - 4);
+    tctx.closePath();
+    tctx.fillStyle = 'rgba(110,168,254,0.13)';
+    tctx.fill();
+  }
+
+  // One lane per actor, showing what they are doing.
+  const actors = DATA.actors.map(a => a.name);
+  const laneH = 13;
+  actors.forEach((name, i) => {
+    const y = 8 + i * (laneH + 3);
+    tctx.fillStyle = 'rgba(255,255,255,0.04)';
+    tctx.fillRect(pad, y, w - 2*pad, laneH);
+    const rgb = PALETTE[i % PALETTE.length];
+    for (const cue of DATA.cues.filter(c => c.actor === name)) {
+      tctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.42)`;
+      tctx.fillRect(x(cue.start), y, Math.max(x(cue.stop) - x(cue.start), 2), laneH);
+      tctx.fillStyle = '#e6e9ee';
+      tctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+      tctx.save();
+      tctx.beginPath();
+      tctx.rect(x(cue.start) + 3, y, Math.max(x(cue.stop) - x(cue.start) - 6, 0), laneH);
+      tctx.clip();
+      tctx.fillText(cue.what, x(cue.start) + 4, y + 10);
+      tctx.restore();
+    }
+  });
+
+  // Event ticks, tall for authored beats and short for spotted sound.
+  const base = h - 4;
+  for (const e of DATA.events) {
+    const tall = e.kind !== 'spot' && e.kind !== 'sound';
+    tctx.strokeStyle = LANE_COLOURS[e.kind] || '#9aa4b2';
+    tctx.globalAlpha = tall ? 0.95 : 0.55;
+    tctx.lineWidth = tall ? 2 : 1;
+    tctx.beginPath();
+    tctx.moveTo(x(e.t), base);
+    tctx.lineTo(x(e.t), base - (tall ? 22 : 11));
+    tctx.stroke();
+  }
+  tctx.globalAlpha = 1;
+
+  tctx.strokeStyle = '#ffffff';
+  tctx.lineWidth = 1.5;
+  tctx.beginPath();
+  tctx.moveTo(x(state.time), 2);
+  tctx.lineTo(x(state.time), h - 2);
+  tctx.stroke();
+
+  document.getElementById('time').textContent =
+    `${state.time.toFixed(2)} / ${span.toFixed(2)} s`;
+}
+
+function seekFromEvent(ev) {
+  const rect = timeline.getBoundingClientRect();
+  const pad = 14;
+  const k = (ev.clientX - rect.left - pad) / Math.max(rect.width - 2*pad, 1);
+  state.time = Math.min(Math.max(k, 0), 1) * duration;
+  draw();
+}
+timeline.addEventListener('pointerdown', ev => {
+  timeline.setPointerCapture(ev.pointerId);
+  seekFromEvent(ev);
+  timeline.onpointermove = seekFromEvent;
+});
+timeline.addEventListener('pointerup', ev => {
+  timeline.onpointermove = null;
+  timeline.releasePointerCapture(ev.pointerId);
+});
+
+/* -------------------------------------------------------------- input -- */
+let drag = null;
+stage.addEventListener('pointerdown', ev => {
+  drag = { x: ev.clientX, y: ev.clientY, pan: ev.shiftKey || ev.button === 2 };
+  stage.setPointerCapture(ev.pointerId);
+});
+stage.addEventListener('pointermove', ev => {
+  if (!drag) return;
+  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  drag.x = ev.clientX; drag.y = ev.clientY;
+  if (drag.pan) {
+    const b = basis(orbitEye(), cam.target);
+    const k = cam.dist / 600;
+    cam.target = add(cam.target, add(scale(b.r, -dx * k), scale(b.u, dy * k)));
+  } else {
+    cam.yaw -= dx * 0.008;
+    cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.006));
+  }
+  draw();
+});
+stage.addEventListener('pointerup', ev => {
+  drag = null;
+  stage.releasePointerCapture(ev.pointerId);
+});
+stage.addEventListener('contextmenu', ev => ev.preventDefault());
+stage.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  cam.dist = Math.max(2, Math.min(120, cam.dist * (1 + Math.sign(ev.deltaY) * 0.12)));
+  draw();
+}, { passive: false });
+
+function toggle(id, key, after) {
+  const el = document.getElementById(id);
+  el.addEventListener('click', () => {
+    state[key] = !state[key];
+    el.classList.toggle('on', state[key]);
+    if (after) after();
+    draw();
+  });
+}
+toggle('loop', 'loop');
+toggle('director', 'director');
+toggle('showset', 'showSet');
+toggle('showgrid', 'showGrid');
+
+// The rig picker only appears when there is a choice to make.
+(function skinPicker() {
+  if (!DATA.skins.length) return;
+  const pick = document.getElementById('skinpick');
+  const select = document.getElementById('skin');
+  pick.hidden = false;
+  DATA.skins.forEach((s, i) => {
+    const option = document.createElement('option');
+    option.value = String(i);
+    option.textContent = s.name;
+    select.appendChild(option);
+  });
+  const boxes = document.createElement('option');
+  boxes.value = '-1';
+  boxes.textContent = 'Boîtes (Block Rig)';
+  select.appendChild(boxes);
+  select.value = String(state.skin);
+  select.addEventListener('change', ev => {
+    state.skin = parseInt(ev.target.value, 10);
+    draw();
+  });
+})();
+
+document.getElementById('play').addEventListener('click', togglePlay);
+document.getElementById('speed').addEventListener('change', ev => {
+  state.speed = parseFloat(ev.target.value);
+});
+for (const [id, yaw, pitch] of [['front', 0, 0.1], ['side', Math.PI/2, 0.1], ['top', 0, 1.35]]) {
+  document.getElementById(id).addEventListener('click', () => {
+    cam.yaw = yaw; cam.pitch = pitch; state.director = false;
+    document.getElementById('director').classList.remove('on');
+    draw();
+  });
+}
+
+function togglePlay() {
+  state.playing = !state.playing;
+  document.getElementById('play').textContent = state.playing ? '❚❚ Pause' : '▶ Lecture';
+  document.getElementById('play').classList.toggle('on', state.playing);
+  if (state.playing) { last = performance.now(); requestAnimationFrame(tick); }
+}
+
+window.addEventListener('keydown', ev => {
+  if (ev.code === 'Space') { ev.preventDefault(); togglePlay(); }
+  else if (ev.code === 'ArrowLeft') {
+    state.time = Math.max(0, state.time - 1 / DATA.fps); draw();
+  } else if (ev.code === 'ArrowRight') {
+    state.time = Math.min(duration, state.time + 1 / DATA.fps); draw();
+  } else if (ev.code === 'Home') { state.time = 0; draw(); }
+});
+
+let last = performance.now();
+function tick(now) {
+  if (!state.playing) return;
+  state.time += (now - last) / 1000 * state.speed;
+  last = now;
+  if (state.time > duration) {
+    if (state.loop) state.time = 0;
+    else { state.time = duration; togglePlay(); }
+  }
+  draw();
+  requestAnimationFrame(tick);
+}
+
+/* --------------------------------------------------------- deep links -- */
+// #t=2.03&cam=front&director=1 opens on a moment. Useful for pointing someone
+// at the exact frame an impact lands, and for screenshotting one.
+(function openAt() {
+  const q = new URLSearchParams(location.hash.slice(1));
+  if (q.has('t')) state.time = Math.min(Math.max(parseFloat(q.get('t')) || 0, 0), duration);
+  if (q.get('director') === '1' && DATA.shots.length) {
+    state.director = true;
+    document.getElementById('director').classList.add('on');
+  }
+  const views = { front: [0, 0.1], side: [Math.PI/2, 0.1], top: [0, 1.35], back: [Math.PI, 0.1] };
+  const view = views[q.get('cam')];
+  if (view) { cam.yaw = view[0]; cam.pitch = view[1]; }
+  if (q.has('dist')) cam.dist = parseFloat(q.get('dist')) || cam.dist;
+})();
+
+resize();
+draw();
+</script>
+</body>
+</html>

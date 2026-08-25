@@ -22,6 +22,9 @@ from .rigs import get_rig
 #: Seconds per beat when a prompt with several beats gives no duration.
 DEFAULT_BEAT_SECONDS = 2.0
 
+#: Imported here so ``--motion auto`` reads as one number in one place.
+_LOOP_LIMIT = 5.0
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="linen", description=__doc__)
@@ -136,13 +139,14 @@ def _add_common_output(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--motion",
-        default="in-place",
-        choices=("in-place", "natural", "loop"),
+        default="auto",
+        choices=("auto", "in-place", "natural", "loop"),
         help=(
-            "in-place: root locked, the Humanoid keeps driving position "
-            "(default); natural: bake root translation, for cutscenes; "
-            "loop: root locked with a seamless seam. Root translation only "
-            "exists on captured or imported clips."
+            "auto (default): root locked, and looping decided by measuring "
+            "whether the wrap from last frame to first costs more than an "
+            "ordinary frame; in-place: the same, never looped; natural: bake "
+            "root translation, for cutscenes; loop: force the loop on. Root "
+            "translation only exists on captured or imported clips."
         ),
     )
 
@@ -460,12 +464,23 @@ def _solve_all(args, track, name: str) -> list:
     options = SolveOptions(
         root_motion=args.motion == "natural", smoothing_frames=args.smoothing
     )
+    # `auto` decides per clip below, once there is a clip to measure.
     loop = args.motion == "loop"
     clips = []
     for rig in _target_rigs(args):
         clip = solve_clip(rig, track, options, name=name)
-        clip.loop = loop
-        clips.append(clip.with_loop_seam() if loop else clip)
+        wants_loop = loop
+        if args.motion == "auto":
+            from .polish import loop_seam
+
+            ratio = loop_seam(clip)
+            wants_loop = ratio <= _LOOP_LIMIT
+            print(
+                f"  boucle: raccord a {ratio:.1f}x une image ordinaire — "
+                f"{'bouclee' if wants_loop else 'jouee une fois'}"
+            )
+        clip.loop = wants_loop
+        clips.append(clip.with_loop_seam() if wants_loop else clip)
     return clips
 
 
@@ -612,6 +627,8 @@ def _window(clip: AnimationClip, lo: int, hi: int) -> AnimationClip:
         rotations={part: track[lo:hi].copy() for part, track in clip.rotations.items()},
         name=clip.name,
         metadata=dict(clip.metadata),
+        loop=clip.loop,
+        priority=clip.priority,
     )
     if clip.root_positions is not None:
         cut.root_positions = clip.root_positions[lo:hi].copy()

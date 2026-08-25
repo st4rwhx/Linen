@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -77,6 +78,33 @@ class ColladaMotion:
         return world[:, :, :3, 3]
 
 
+def _source(path: Path) -> bytes:
+    """The Collada XML, unwrapped from its archive if it is in one."""
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise ColladaError(f"{path.name}: cannot be read ({exc})") from None
+
+    if not data.startswith(b"PK\x03\x04"):
+        return data
+
+    try:
+        with zipfile.ZipFile(path) as archive:
+            names = [
+                name
+                for name in archive.namelist()
+                if name.lower().endswith(".dae") and not name.endswith("/")
+            ]
+            if not names:
+                raise ColladaError(
+                    f"{path.name} is a zip, and there is no .dae inside it: "
+                    f"{', '.join(archive.namelist()[:6]) or 'it is empty'}"
+                )
+            return archive.read(names[0])
+    except zipfile.BadZipFile as exc:
+        raise ColladaError(f"{path.name}: damaged archive ({exc})") from None
+
+
 def _tag(element: ET.Element) -> str:
     return _NAMESPACE.sub("", element.tag)
 
@@ -97,10 +125,16 @@ def _floats(text: str | None) -> np.ndarray:
 
 
 def read_collada(path: str | Path) -> ColladaMotion:
-    """Parse a baked Collada animation into a skeleton and its motion."""
+    """Parse a baked Collada animation into a skeleton and its motion.
+
+    Accepts a zipped one too, because that is what actually arrives: Mixamo
+    delivers its Collada downloads compressed, and the archive keeps the
+    ``.dae`` extension, so the file on disk is a zip whose single entry is the
+    XML. Refusing it would have been technically correct and useless.
+    """
     path = Path(path)
     try:
-        root = ET.parse(path).getroot()
+        root = ET.fromstring(_source(path))
     except ET.ParseError as exc:
         raise ColladaError(f"{path.name}: not readable XML ({exc})") from None
 

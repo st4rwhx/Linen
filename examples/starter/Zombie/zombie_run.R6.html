@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zombie_run — Linen</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f25; --line: #2a2f37;
+    --ink: #e6e9ee; --dim: #8b93a1; --accent: #6ea8fe;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 14px; margin: 0; font-weight: 600; }
+  header .meta { color: var(--dim); font-size: 12px; }
+  main { flex: 1; position: relative; min-height: 0; }
+  canvas#stage { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas#stage:active { cursor: grabbing; }
+  #hud {
+    position: absolute; top: 10px; left: 12px; pointer-events: none;
+    font-variant-numeric: tabular-nums; color: var(--dim); font-size: 12px;
+  }
+  #fired {
+    position: absolute; top: 10px; right: 12px; pointer-events: none;
+    text-align: right; font-size: 12px; max-width: 40%;
+  }
+  #fired div { opacity: 0.9; }
+  #legend {
+    position: absolute; bottom: 10px; left: 12px; pointer-events: none;
+    color: var(--dim); font-size: 11px;
+  }
+  footer { border-top: 1px solid var(--line); background: var(--panel); }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; flex-wrap: wrap; }
+  button, select {
+    background: #262b33; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: #3d444f; }
+  button.on { background: var(--accent); color: #0d1117; border-color: var(--accent); }
+  label { color: var(--dim); display: inline-flex; align-items: center; gap: 6px; }
+  #time { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 128px; }
+  canvas#timeline { display: block; width: 100%; height: 92px; cursor: pointer; }
+  kbd {
+    background: #262b33; border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 4px; font: 11px ui-monospace, monospace;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>zombie_run</h1>
+  <span class="meta" id="summary"></span>
+</header>
+
+<main>
+  <canvas id="stage"></canvas>
+  <div id="hud"></div>
+  <div id="fired"></div>
+  <div id="legend">
+    glisser : tourner &nbsp;·&nbsp; molette : zoom &nbsp;·&nbsp; maj+glisser : déplacer
+    &nbsp;·&nbsp; <kbd>espace</kbd> lecture &nbsp;·&nbsp; <kbd>←</kbd><kbd>→</kbd> frame
+  </div>
+</main>
+
+<footer>
+  <canvas id="timeline"></canvas>
+  <div class="bar">
+    <button id="play">▶ Lecture</button>
+    <button id="loop" class="on">↻ Boucle</button>
+    <span id="time"></span>
+    <label>vitesse
+      <select id="speed">
+        <option value="0.1">0,1×</option>
+        <option value="0.25">0,25×</option>
+        <option value="0.5">0,5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+    <label id="skinpick" hidden>rig
+      <select id="skin"></select>
+    </label>
+    <button id="director">🎬 Caméra du réalisateur</button>
+    <button id="showset" class="on">Décor</button>
+    <button id="showgrid" class="on">Grille</button>
+    <button id="front">Face</button>
+    <button id="side">Profil</button>
+    <button id="top">Dessus</button>
+  </div>
+</footer>
+
+<script>
+const DATA = {"skins":[],"name":"zombie_run","fps":30.0,"duration":0.8,"frameCount":25,"rigs":{"R6":{"name":"R6","parts":[{"name":"HumanoidRootPart","parent":null,"joint":null,"size":[2.0,2.0,1.0],"pivot":[0.0,-1.0,0.0],"offsetFromPivot":[0.0,1.0,0.0]},{"name":"Torso","parent":"HumanoidRootPart","joint":"RootJoint","size":[2.0,2.0,1.0],"pivot":[0.0,-1.0,0.0],"offsetFromPivot":[0.0,1.0,0.0]},{"name":"Head","parent":"Torso","joint":"Neck","size":[2.0,1.0,1.0],"pivot":[0.0,1.0,0.0],"offsetFromPivot":[0.0,0.5,0.0]},{"name":"Left Arm","parent":"Torso","joint":"Left Shoulder","size":[1.0,2.0,1.0],"pivot":[-1.5,1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]},{"name":"Right Arm","parent":"Torso","joint":"Right Shoulder","size":[1.0,2.0,1.0],"pivot":[1.5,1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]},{"name":"Left Leg","parent":"Torso","joint":"Left Hip","size":[1.0,2.0,1.0],"pivot":[-0.5,-1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]},{"name":"Right Leg","parent":"Torso","joint":"Right Hip","size":[1.0,2.0,1.0],"pivot":[0.5,-1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]}]}},"actors":[{"name":"zombie_run","rig":"R6","position":[0.0,3.0,0.0],"yaw":0.0,"rotations":{"Torso":[-0.21742,-0.01163,-0.08521,0.97228,-0.21837,-0.00605,-0.0766,0.97284,-0.21811,0.00186,-0.06216,0.97394,-0.21352,0.00814,-0.04336,0.97594,-0.2048,0.01266,-0.02158,0.97848,-0.19256,0.01582,0.00302,0.98115,-0.1799,0.01888,0.02796,0.98311,-0.17111,0.02201,0.05028,0.98372,-0.17029,0.02539,0.0664,0.98283,-0.1799,0.02895,0.07295,0.98055,-0.19723,0.03147,0.06769,0.97751,-0.2164,0.03074,0.05154,0.97446,-0.23073,0.02534,0.02905,0.97225,-0.23792,0.01663,0.00683,0.97112,-0.23748,0.00747,-0.01025,0.97131,-0.22948,5e-05,-0.02338,0.97303,-0.21566,-0.00522,-0.03488,0.97583,-0.19867,-0.00894,-0.0484,0.97883,-0.18469,-0.01201,-0.06221,0.98075,-0.18274,-0.01432,-0.07714,0.98003,-0.18967,-0.01568,-0.08504,0.97803,-0.19994,-0.01586,-0.08779,0.97574,-0.20966,-0.01475,-0.08741,0.97375,-0.21546,-0.01286,-0.08612,0.97262,-0.21742,-0.01163,-0.08521,0.97228],"Head":[-0.28337,0.00215,-0.02081,0.95878,-0.27784,0.02089,-0.00385,0.96039,-0.26905,0.04971,0.02125,0.96161,-0.25967,0.07915,0.04498,0.9614,-0.25091,0.10816,0.06747,0.95958,-0.24486,0.13473,0.08864,0.95605,-0.24406,0.15655,0.10846,0.95088,-0.24951,0.17035,0.12498,0.94504,-0.26064,0.17198,0.1357,0.94025,-0.27562,0.15692,0.13785,0.9383,-0.29337,0.12388,0.12897,0.93913,-0.31157,0.07839,0.10899,0.94069,-0.32856,0.03062,0.08106,0.9405,-0.34257,-0.01116,0.05085,0.93805,-0.35351,-0.04431,0.02259,0.93411,-0.35994,-0.07099,-0.00234,0.93027,-0.36155,-0.09396,-0.02454,0.92728,-0.35626,-0.11237,-0.04417,0.92655,-0.34608,-0.12163,-0.05961,0.92838,-0.32477,-0.10028,-0.06203,0.93841,-0.30809,-0.07186,-0.05665,0.94694,-0.29655,-0.04359,-0.0468,0.95287,-0.2893,-0.01963,-0.03519,0.95639,-0.28507,-0.00405,-0.02547,0.95816,-0.28337,0.00215,-0.02081,0.95878],"Left Arm":[0.22484,0.04976,-0.316,0.92039,0.1841,0.06683,-0.32579,0.92494,0.12546,0.09167,-0.3378,0.9283,0.0767,0.11455,-0.34703,0.92767,0.04059,0.13626,-0.35373,0.92448,0.02748,0.16057,-0.35879,0.91909,0.04255,0.19078,-0.3608,0.91193,0.08527,0.22381,-0.35807,0.90246,0.14827,0.25015,-0.34791,0.89129,0.22478,0.25876,-0.32766,0.88043,0.30845,0.24277,-0.29606,0.87079,0.39209,0.20542,-0.25474,0.85975,0.46702,0.15736,-0.20843,0.8448,0.52736,0.10995,-0.16136,0.8269,0.56796,0.06845,-0.11743,0.81176,0.58652,0.03593,-0.08508,0.80465,0.5871,0.01125,-0.06743,0.80662,0.575,-0.0049,-0.06975,0.81516,0.55381,-0.01486,-0.08764,0.82788,0.47784,-0.00787,-0.15369,0.86486,0.40176,0.00395,-0.2134,0.89053,0.33267,0.0183,-0.26086,0.90606,0.27672,0.03317,-0.2934,0.91446,0.23983,0.04464,-0.31052,0.91873,0.22484,0.04976,-0.316,0.92039],"Right Arm":[0.49251,-0.13717,0.1746,0.84151,0.52114,-0.11675,0.16087,0.83,0.55621,-0.08621,0.14229,0.81422,0.57046,-0.05823,0.13376,0.80827,0.56619,-0.0325,0.13602,0.81232,0.54419,-0.00882,0.15067,0.82527,0.51214,0.01474,0.17321,0.84113,0.47139,0.03725,0.20091,0.85792,0.42111,0.05588,0.23011,0.87555,0.36194,0.06395,0.25634,0.89398,0.29808,0.05394,0.27538,0.91236,0.23788,0.02461,0.28509,0.92819,0.18756,-0.0161,0.28621,0.93949,0.14951,-0.05696,0.28271,0.94577,0.12254,-0.0913,0.27925,0.94798,0.10678,-0.11993,0.27629,0.94756,0.10096,-0.1457,0.27352,0.94539,0.10673,-0.16964,0.2685,0.9422,0.12499,-0.18832,0.26387,0.9377,0.21515,-0.19161,0.24758,0.92504,0.30334,-0.18442,0.23133,0.90579,0.38137,-0.17127,0.21255,0.8832,0.4418,-0.15583,0.19404,0.8619,0.47871,-0.14309,0.18028,0.84727,0.49251,-0.13717,0.1746,0.84151],"Left Leg":[0.24451,0.02428,0.03841,0.96858,0.2934,0.02292,0.02308,0.95544,0.36036,0.02026,-0.00265,0.93259,0.41272,0.01753,-0.03363,0.91007,0.44621,0.01364,-0.0634,0.89258,0.45638,0.0077,-0.09131,0.88505,0.4445,-0.0013,-0.11659,0.88816,0.42274,-0.00985,-0.14043,0.89525,0.39726,-0.01903,-0.15224,0.90479,0.36389,-0.0239,-0.15127,0.91877,0.33575,-0.02435,-0.14144,0.93095,0.30898,-0.02045,-0.12055,0.94318,0.27697,-0.01268,-0.09334,0.95625,0.23737,-0.00415,-0.06655,0.96913,0.18947,0.00129,-0.04508,0.98085,0.13271,0.00225,-0.02733,0.99078,0.052,0.00106,-0.02831,0.99825,-0.02308,-0.00416,-0.04061,0.9989,-0.06585,-0.01123,-0.03205,0.99725,-0.03319,-0.00976,-0.01052,0.99935,0.15389,-0.00148,0.00555,0.98807,0.24177,0.01158,0.01997,0.97006,0.20771,0.01947,0.03071,0.97751,0.17064,0.02131,0.03755,0.98439,0.12987,0.01908,0.04315,0.99041],"Right Leg":[0.19624,-0.00467,0.16167,0.96712,0.15016,-0.00814,0.15919,0.97573,0.09927,-0.00706,0.15062,0.98357,0.0424,-0.00224,0.13639,0.98974,-0.02017,0.00472,0.12237,0.99227,-0.06996,0.01402,0.10352,0.99206,-0.10954,0.02387,0.07588,0.99079,-0.13499,0.03159,0.04799,0.98918,-0.13975,0.0341,0.02386,0.98931,-0.11155,0.0272,0.00169,0.99338,-0.05095,0.01266,-0.01059,0.99856,0.19964,-0.00648,0.01092,0.97979,0.32734,-0.01884,0.04277,0.94375,0.29619,-0.02863,0.06112,0.95274,0.25908,-0.04042,0.0791,0.96176,0.21153,-0.05595,0.09792,0.97084,0.29638,-0.05634,0.1259,0.94506,0.44703,-0.03182,0.14819,0.88158,0.43245,-0.01473,0.1402,0.89057,0.3705,-0.0016,0.13983,0.91825,0.32908,0.00172,0.15541,0.93143,0.2936,0.0027,0.16577,0.94144,0.25909,0.0005,0.17269,0.95029,0.22101,-0.00466,0.17794,0.95889,0.17958,-0.01164,0.18232,0.96663]},"root":null}],"set":[],"shots":[],"cues":[],"events":[],"tension":[]};
+
+/* ---------------------------------------------------------------- maths -- */
+const IDENT = [1,0,0, 0,1,0, 0,0,1];
+
+function matMul(a, b) {
+  const o = new Array(9);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+    o[r*3+c] = a[r*3]*b[c] + a[r*3+1]*b[3+c] + a[r*3+2]*b[6+c];
+  }
+  return o;
+}
+function matVec(m, v) {
+  return [
+    m[0]*v[0] + m[1]*v[1] + m[2]*v[2],
+    m[3]*v[0] + m[4]*v[1] + m[5]*v[2],
+    m[6]*v[0] + m[7]*v[1] + m[8]*v[2],
+  ];
+}
+function add(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+function sub(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+function scale(a, k) { return [a[0]*k, a[1]*k, a[2]*k]; }
+function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function cross(a, b) {
+  return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+}
+function norm(a) {
+  const n = Math.hypot(a[0], a[1], a[2]) || 1;
+  return [a[0]/n, a[1]/n, a[2]/n];
+}
+// Quaternion xyzw to a rotation matrix, matching linen.math3d.quat_to_mat.
+function quatToMat(x, y, z, w) {
+  const xx = x*x, yy = y*y, zz = z*z;
+  const xy = x*y, xz = x*z, yz = y*z, wx = w*x, wy = w*y, wz = w*z;
+  return [
+    1-2*(yy+zz),   2*(xy-wz),   2*(xz+wy),
+      2*(xy+wz), 1-2*(xx+zz),   2*(yz-wx),
+      2*(xz-wy),   2*(yz+wx), 1-2*(xx+yy),
+  ];
+}
+function yawMat(deg) {
+  const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  // Turns the rig's -Z forward onto the heading the Studio script gives it.
+  return [c, 0, s, 0, 1, 0, -s, 0, c];
+}
+
+/* ------------------------------------------------- forward kinematics ---- */
+// The same chain the exporter and the Studio player walk: a joint frame at the
+// pivot that the pose rotates, then the part's centre offset inside it.
+function poseAt(rig, actor, frame) {
+  const placed = {};
+  for (const part of rig.parts) {
+    const track = actor.rotations[part.name];
+    let local = IDENT;
+    if (track) {
+      const i = frame * 4;
+      local = quatToMat(track[i], track[i+1], track[i+2], track[i+3]);
+    }
+    if (part.parent === null) {
+      let root = [0, 0, 0];
+      if (actor.root) root = [actor.root[frame*3], actor.root[frame*3+1], actor.root[frame*3+2]];
+      placed[part.name] = { p: root, r: local };
+      continue;
+    }
+    const parent = placed[part.parent];
+    const joint = add(parent.p, matVec(parent.r, part.pivot));
+    const r = matMul(parent.r, local);
+    placed[part.name] = { p: add(joint, matVec(r, part.offsetFromPivot)), r: r };
+  }
+  return placed;
+}
+
+/* ------------------------------------------------------------ geometry -- */
+const CORNERS = [
+  [-.5,-.5,-.5], [.5,-.5,-.5], [.5,.5,-.5], [-.5,.5,-.5],
+  [-.5,-.5,.5], [.5,-.5,.5], [.5,.5,.5], [-.5,.5,.5],
+];
+const FACES = [
+  [0,1,2,3], [5,4,7,6], [4,0,3,7], [1,5,6,2], [3,2,6,7], [4,5,1,0],
+];
+const LIGHT = norm([0.4, 0.85, 0.45]);
+
+const PALETTE = [
+  [110, 168, 254], [232, 143, 106], [143, 217, 143],
+  [201, 154, 232], [232, 184, 75], [127, 209, 232],
+];
+
+/* -------------------------------------------------------------- camera -- */
+const cam = { yaw: 0.55, pitch: 0.22, dist: 16, target: [0, 3, -2], fov: 45 };
+
+function orbitEye() {
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  return add(cam.target, [
+    cam.dist * cp * Math.sin(cam.yaw),
+    cam.dist * sp,
+    cam.dist * cp * Math.cos(cam.yaw),
+  ]);
+}
+
+function basis(eye, target) {
+  const f = norm(sub(target, eye));
+  let r = cross(f, [0, 1, 0]);
+  if (Math.hypot(r[0], r[1], r[2]) < 1e-6) r = [1, 0, 0];
+  r = norm(r);
+  return { f: f, r: r, u: cross(r, f) };
+}
+
+/* --------------------------------------------------------------- state -- */
+const stage = document.getElementById('stage');
+const ctx = stage.getContext('2d');
+const timeline = document.getElementById('timeline');
+const tctx = timeline.getContext('2d');
+
+const state = {
+  time: 0, playing: false, loop: true, speed: 1,
+  director: false, showSet: true, showGrid: true,
+  //: Index into DATA.skins, or -1 for the plain boxes a Block Rig really is.
+  skin: DATA.skins.length ? 0 : -1,
+};
+const frames = Math.max(DATA.frameCount, 1);
+const duration = DATA.duration || (frames - 1) / (DATA.fps || 30);
+
+document.getElementById('summary').textContent =
+  `${DATA.actors.length} acteur(s) · ${duration.toFixed(2)} s · ${DATA.fps} fps` +
+  (DATA.cues.length ? ` · ${DATA.cues.length} cues` : '') +
+  (DATA.events.length ? ` · ${DATA.events.length} événements` : '');
+
+// Frame the cast on load, so nothing opens off-screen.
+(function frameCast() {
+  if (!DATA.actors.length) return;
+  let lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  for (const a of DATA.actors) for (let i = 0; i < 3; i++) {
+    lo[i] = Math.min(lo[i], a.position[i]); hi[i] = Math.max(hi[i], a.position[i]);
+  }
+  cam.target = [(lo[0]+hi[0])/2, (lo[1]+hi[1])/2 + 1, (lo[2]+hi[2])/2];
+  const span = Math.max(hi[0]-lo[0], hi[2]-lo[2], 4);
+  cam.dist = span + 12;
+})();
+
+/* -------------------------------------------------------------- render -- */
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  for (const [c, h] of [[stage, stage.clientHeight], [timeline, timeline.clientHeight]]) {
+    c.width = Math.max(c.clientWidth * dpr, 1);
+    c.height = Math.max(h * dpr, 1);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', () => { resize(); draw(); });
+
+function activeShot(t) {
+  if (!DATA.shots.length) return null;
+  let current = null;
+  for (const e of DATA.events) {
+    if (e.kind !== 'camera' || e.t > t) continue;
+    const shot = DATA.shots.find(s => e.label === 'plan ' + s.id);
+    if (shot) current = { shot: shot, at: e.t };
+  }
+  return current || { shot: DATA.shots[0], at: 0 };
+}
+
+function subjectPosition(name, placed) {
+  const actor = DATA.actors.find(a => a.name === name);
+  if (actor) {
+    const p = placed[actor.name];
+    const head = p && (p['Head'] || p['UpperTorso'] || p['Torso']);
+    if (head) return worldOf(actor, head.p);
+    return [actor.position[0], actor.position[1] + 1.5, actor.position[2]];
+  }
+  const piece = DATA.set.find(s => s.name === name);
+  if (piece) return piece.position;
+  return cam.target;
+}
+
+function worldOf(actor, local) {
+  return add(actor.position, matVec(yawMat(actor.yaw), local));
+}
+
+function draw() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#14161a';
+  ctx.fillRect(0, 0, w, h);
+
+  const frame = Math.min(Math.round(state.time * DATA.fps), frames - 1);
+  const placed = {};
+  for (const actor of DATA.actors) {
+    placed[actor.name] = poseAt(DATA.rigs[actor.rig], actor, frame);
+  }
+
+  let eye, target, fov = cam.fov;
+  if (state.director && DATA.shots.length) {
+    const cut = activeShot(state.time);
+    eye = cut.shot.position.slice();
+    const drift = cut.shot.drift || [0, 0, 0];
+    // Every shot drifts, exactly as the Studio player tweens it.
+    const k = Math.min((state.time - cut.at) / 4, 1);
+    eye = add(eye, scale(drift, k));
+    target = subjectPosition(cut.shot.lookAt, placed);
+    fov = cut.shot.fov;
+  } else {
+    eye = orbitEye();
+    target = cam.target;
+  }
+
+  const b = basis(eye, target);
+  const focal = (h / 2) / Math.tan(fov * Math.PI / 360);
+  const quads = [];
+
+  function project(p) {
+    const d = sub(p, eye);
+    const z = dot(d, b.f);
+    if (z < 0.2) return null;
+    return { x: w/2 + dot(d, b.r) * focal / z, y: h/2 - dot(d, b.u) * focal / z, z: z };
+  }
+
+  // The floor is painted in its own pass, before everything else. Sorting it
+  // with the rest by centroid depth puts its near edge in front of the actors
+  // standing on it — a big quad's centroid can be nearer than a small object
+  // genuinely in front of it. Nothing is ever under the ground, so this is
+  // correct by construction rather than a fudge.
+  const ground = [];
+
+  function box(centre, rot, size, rgb, alpha, into) {
+    const bucket = into || quads;
+    const world = CORNERS.map(c =>
+      add(centre, matVec(rot, [c[0]*size[0], c[1]*size[1], c[2]*size[2]])));
+    const screen = world.map(project);
+    for (const face of FACES) {
+      const pts = face.map(i => screen[i]);
+      if (pts.some(p => p === null)) continue;
+      const a = world[face[0]], bb = world[face[1]], cc = world[face[2]];
+      const n = norm(cross(sub(bb, a), sub(cc, bb)));
+      // Back-face cull, so interior faces never paint over the silhouette.
+      if (dot(n, sub(a, eye)) > 0) continue;
+      const shade = 0.42 + 0.58 * Math.max(dot(n, LIGHT), 0);
+      bucket.push({
+        pts: pts,
+        depth: (pts[0].z + pts[1].z + pts[2].z + pts[3].z) / 4,
+        fill: `rgba(${Math.round(rgb[0]*shade)},${Math.round(rgb[1]*shade)},` +
+              `${Math.round(rgb[2]*shade)},${alpha})`,
+      });
+    }
+  }
+
+  if (state.showSet) {
+    for (const piece of DATA.set) {
+      const floor = piece.kind === 'sol';
+      box(piece.position, IDENT, piece.size, [92, 98, 110], 0.9, floor ? ground : quads);
+    }
+  }
+  ground.sort((p, q) => q.depth - p.depth);
+  paint(ground);
+
+  if (state.showGrid) drawGrid(project);
+
+  // A skin replaces a part's box with real geometry. Its vertices are already
+  // in that part's local space, scaled into that part's box, so it rides the
+  // exact same transform the box does and cannot come apart at the joints.
+  function skinned(centre, rot, geometry, rgb) {
+    const verts = geometry.vertices, tris = geometry.triangles;
+    const world = new Array(verts.length / 3);
+    for (let i = 0; i < world.length; i++) {
+      world[i] = add(centre, matVec(rot, [verts[i*3], verts[i*3+1], verts[i*3+2]]));
+    }
+    const screen = world.map(project);
+    for (let t = 0; t < tris.length; t += 3) {
+      const a = screen[tris[t]], b2 = screen[tris[t+1]], c2 = screen[tris[t+2]];
+      if (!a || !b2 || !c2) continue;
+      const wa = world[tris[t]], wb = world[tris[t+1]], wc = world[tris[t+2]];
+      const n = norm(cross(sub(wb, wa), sub(wc, wb)));
+      if (dot(n, sub(wa, eye)) > 0) continue;
+      const shade = 0.42 + 0.58 * Math.max(dot(n, LIGHT), 0);
+      quads.push({
+        pts: [a, b2, c2],
+        depth: (a.z + b2.z + c2.z) / 3,
+        fill: `rgb(${Math.round(rgb[0]*shade)},${Math.round(rgb[1]*shade)},` +
+              `${Math.round(rgb[2]*shade)})`,
+      });
+    }
+  }
+
+  const skin = DATA.skins[state.skin] || null;
+
+  DATA.actors.forEach((actor, index) => {
+    const rgb = PALETTE[index % PALETTE.length];
+    const rig = DATA.rigs[actor.rig];
+    const yaw = yawMat(actor.yaw);
+    for (const part of rig.parts) {
+      if (part.parent === null) continue;  // HumanoidRootPart is invisible in game
+      const local = placed[actor.name][part.name];
+      const centre = add(actor.position, matVec(yaw, local.p));
+      const rot = matMul(yaw, local.r);
+      const geometry = skin && skin.rig === actor.rig ? skin.parts[part.name] : null;
+      if (geometry) skinned(centre, rot, geometry, rgb);
+      else box(centre, rot, part.size, rgb, 1);
+    }
+  });
+
+  quads.sort((p, q) => q.depth - p.depth);
+  paint(quads);
+
+  // Name every actor and every set piece, so the view matches the build sheet.
+  ctx.font = '12px ui-sans-serif, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  DATA.actors.forEach((actor, index) => {
+    const p = placed[actor.name]['Head'] || placed[actor.name]['Torso'];
+    if (!p) return;
+    const s = project(add(worldOf(actor, p.p), [0, 1.2, 0]));
+    if (!s) return;
+    const rgb = PALETTE[index % PALETTE.length];
+    ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    ctx.fillText(actor.name, s.x, s.y);
+  });
+  if (state.showSet) {
+    ctx.fillStyle = '#8b93a1';
+    for (const piece of DATA.set) {
+      const s = project(add(piece.position, [0, piece.size[1] / 2 + 0.6, 0]));
+      if (s) ctx.fillText(piece.name, s.x, s.y);
+    }
+  }
+  ctx.textAlign = 'left';
+
+  drawHud(frame);
+  drawTimeline();
+}
+
+function paint(quads) {
+  for (const quad of quads) {
+    ctx.beginPath();
+    ctx.moveTo(quad.pts[0].x, quad.pts[0].y);
+    for (let i = 1; i < quad.pts.length; i++) ctx.lineTo(quad.pts[i].x, quad.pts[i].y);
+    ctx.closePath();
+    ctx.fillStyle = quad.fill;
+    ctx.fill();
+  }
+}
+
+function drawGrid(project) {
+  const y = groundLevel();
+  const half = 20, step = 4;
+  ctx.strokeStyle = 'rgba(120,132,150,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = -half; i <= half; i += step) {
+    for (const seg of [
+      [[i, y, -half], [i, y, half]],
+      [[-half, y, i], [half, y, i]],
+    ]) {
+      const a = project(seg[0]), b = project(seg[1]);
+      if (!a || !b) continue;
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+    }
+  }
+  ctx.stroke();
+}
+
+function groundLevel() {
+  const floor = DATA.set.find(s => s.kind === 'sol');
+  if (floor) return floor.position[1] + floor.size[1] / 2;
+  return 0;
+}
+
+function drawHud(frame) {
+  const hud = document.getElementById('hud');
+  const cut = state.director ? activeShot(state.time) : null;
+  hud.innerHTML =
+    `frame ${frame} / ${frames - 1} &nbsp; ${state.time.toFixed(2)} s` +
+    (cut ? `<br>plan « ${cut.shot.id} » · ${cut.shot.fov}° · vise ${cut.shot.lookAt}` : '') +
+    (DATA.tension.length ? `<br>tension ${tensionAt(state.time).toFixed(2)}` : '');
+
+  // Anything that fired in the last third of a second, newest first.
+  const recent = DATA.events
+    .filter(e => e.t <= state.time && state.time - e.t < 0.35)
+    .slice(-6).reverse();
+  document.getElementById('fired').innerHTML = recent.map(e => {
+    const fade = 1 - (state.time - e.t) / 0.35;
+    const colour = LANE_COLOURS[e.kind] || '#9aa4b2';
+    const who = e.actor ? `${e.actor} · ` : '';
+    return `<div style="color:${colour};opacity:${(0.35 + 0.65*fade).toFixed(2)}">` +
+           `${who}${escapeHtml(e.label)}</div>`;
+  }).join('');
+}
+
+const LANE_COLOURS = {"camera": "#e8b84b", "line": "#7fd1e8", "face": "#c99ae8", "prop": "#8fd98f", "vfx": "#e88f6a", "sound": "#9aa4b2", "spot": "#9aa4b2"};
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+function tensionAt(t) {
+  const curve = DATA.tension;
+  if (!curve.length) return 0;
+  if (t <= curve[0][0]) return curve[0][1];
+  for (let i = 0; i < curve.length - 1; i++) {
+    if (t < curve[i+1][0]) {
+      const span = curve[i+1][0] - curve[i][0] || 1;
+      const k = (t - curve[i][0]) / span;
+      return curve[i][1] + (curve[i+1][1] - curve[i][1]) * k;
+    }
+  }
+  return curve[curve.length - 1][1];
+}
+
+/* ------------------------------------------------------------ timeline -- */
+function drawTimeline() {
+  const w = timeline.clientWidth, h = timeline.clientHeight;
+  tctx.clearRect(0, 0, w, h);
+  const pad = 14;
+  const span = Math.max(duration, 0.001);
+  const x = t => pad + (w - 2*pad) * (t / span);
+
+  // Tension behind everything: the shape of the scene at a glance.
+  if (DATA.tension.length) {
+    tctx.beginPath();
+    tctx.moveTo(x(0), h - 4);
+    for (const [t, v] of DATA.tension) tctx.lineTo(x(t), h - 4 - v * (h - 30));
+    tctx.lineTo(x(span), h - 4);
+    tctx.closePath();
+    tctx.fillStyle = 'rgba(110,168,254,0.13)';
+    tctx.fill();
+  }
+
+  // One lane per actor, showing what they are doing.
+  const actors = DATA.actors.map(a => a.name);
+  const laneH = 13;
+  actors.forEach((name, i) => {
+    const y = 8 + i * (laneH + 3);
+    tctx.fillStyle = 'rgba(255,255,255,0.04)';
+    tctx.fillRect(pad, y, w - 2*pad, laneH);
+    const rgb = PALETTE[i % PALETTE.length];
+    for (const cue of DATA.cues.filter(c => c.actor === name)) {
+      tctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.42)`;
+      tctx.fillRect(x(cue.start), y, Math.max(x(cue.stop) - x(cue.start), 2), laneH);
+      tctx.fillStyle = '#e6e9ee';
+      tctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+      tctx.save();
+      tctx.beginPath();
+      tctx.rect(x(cue.start) + 3, y, Math.max(x(cue.stop) - x(cue.start) - 6, 0), laneH);
+      tctx.clip();
+      tctx.fillText(cue.what, x(cue.start) + 4, y + 10);
+      tctx.restore();
+    }
+  });
+
+  // Event ticks, tall for authored beats and short for spotted sound.
+  const base = h - 4;
+  for (const e of DATA.events) {
+    const tall = e.kind !== 'spot' && e.kind !== 'sound';
+    tctx.strokeStyle = LANE_COLOURS[e.kind] || '#9aa4b2';
+    tctx.globalAlpha = tall ? 0.95 : 0.55;
+    tctx.lineWidth = tall ? 2 : 1;
+    tctx.beginPath();
+    tctx.moveTo(x(e.t), base);
+    tctx.lineTo(x(e.t), base - (tall ? 22 : 11));
+    tctx.stroke();
+  }
+  tctx.globalAlpha = 1;
+
+  tctx.strokeStyle = '#ffffff';
+  tctx.lineWidth = 1.5;
+  tctx.beginPath();
+  tctx.moveTo(x(state.time), 2);
+  tctx.lineTo(x(state.time), h - 2);
+  tctx.stroke();
+
+  document.getElementById('time').textContent =
+    `${state.time.toFixed(2)} / ${span.toFixed(2)} s`;
+}
+
+function seekFromEvent(ev) {
+  const rect = timeline.getBoundingClientRect();
+  const pad = 14;
+  const k = (ev.clientX - rect.left - pad) / Math.max(rect.width - 2*pad, 1);
+  state.time = Math.min(Math.max(k, 0), 1) * duration;
+  draw();
+}
+timeline.addEventListener('pointerdown', ev => {
+  timeline.setPointerCapture(ev.pointerId);
+  seekFromEvent(ev);
+  timeline.onpointermove = seekFromEvent;
+});
+timeline.addEventListener('pointerup', ev => {
+  timeline.onpointermove = null;
+  timeline.releasePointerCapture(ev.pointerId);
+});
+
+/* -------------------------------------------------------------- input -- */
+let drag = null;
+stage.addEventListener('pointerdown', ev => {
+  drag = { x: ev.clientX, y: ev.clientY, pan: ev.shiftKey || ev.button === 2 };
+  stage.setPointerCapture(ev.pointerId);
+});
+stage.addEventListener('pointermove', ev => {
+  if (!drag) return;
+  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  drag.x = ev.clientX; drag.y = ev.clientY;
+  if (drag.pan) {
+    const b = basis(orbitEye(), cam.target);
+    const k = cam.dist / 600;
+    cam.target = add(cam.target, add(scale(b.r, -dx * k), scale(b.u, dy * k)));
+  } else {
+    cam.yaw -= dx * 0.008;
+    cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.006));
+  }
+  draw();
+});
+stage.addEventListener('pointerup', ev => {
+  drag = null;
+  stage.releasePointerCapture(ev.pointerId);
+});
+stage.addEventListener('contextmenu', ev => ev.preventDefault());
+stage.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  cam.dist = Math.max(2, Math.min(120, cam.dist * (1 + Math.sign(ev.deltaY) * 0.12)));
+  draw();
+}, { passive: false });
+
+function toggle(id, key, after) {
+  const el = document.getElementById(id);
+  el.addEventListener('click', () => {
+    state[key] = !state[key];
+    el.classList.toggle('on', state[key]);
+    if (after) after();
+    draw();
+  });
+}
+toggle('loop', 'loop');
+toggle('director', 'director');
+toggle('showset', 'showSet');
+toggle('showgrid', 'showGrid');
+
+// The rig picker only appears when there is a choice to make.
+(function skinPicker() {
+  if (!DATA.skins.length) return;
+  const pick = document.getElementById('skinpick');
+  const select = document.getElementById('skin');
+  pick.hidden = false;
+  DATA.skins.forEach((s, i) => {
+    const option = document.createElement('option');
+    option.value = String(i);
+    option.textContent = s.name;
+    select.appendChild(option);
+  });
+  const boxes = document.createElement('option');
+  boxes.value = '-1';
+  boxes.textContent = 'Boîtes (Block Rig)';
+  select.appendChild(boxes);
+  select.value = String(state.skin);
+  select.addEventListener('change', ev => {
+    state.skin = parseInt(ev.target.value, 10);
+    draw();
+  });
+})();
+
+document.getElementById('play').addEventListener('click', togglePlay);
+document.getElementById('speed').addEventListener('change', ev => {
+  state.speed = parseFloat(ev.target.value);
+});
+for (const [id, yaw, pitch] of [['front', 0, 0.1], ['side', Math.PI/2, 0.1], ['top', 0, 1.35]]) {
+  document.getElementById(id).addEventListener('click', () => {
+    cam.yaw = yaw; cam.pitch = pitch; state.director = false;
+    document.getElementById('director').classList.remove('on');
+    draw();
+  });
+}
+
+function togglePlay() {
+  state.playing = !state.playing;
+  document.getElementById('play').textContent = state.playing ? '❚❚ Pause' : '▶ Lecture';
+  document.getElementById('play').classList.toggle('on', state.playing);
+  if (state.playing) { last = performance.now(); requestAnimationFrame(tick); }
+}
+
+window.addEventListener('keydown', ev => {
+  if (ev.code === 'Space') { ev.preventDefault(); togglePlay(); }
+  else if (ev.code === 'ArrowLeft') {
+    state.time = Math.max(0, state.time - 1 / DATA.fps); draw();
+  } else if (ev.code === 'ArrowRight') {
+    state.time = Math.min(duration, state.time + 1 / DATA.fps); draw();
+  } else if (ev.code === 'Home') { state.time = 0; draw(); }
+});
+
+let last = performance.now();
+function tick(now) {
+  if (!state.playing) return;
+  state.time += (now - last) / 1000 * state.speed;
+  last = now;
+  if (state.time > duration) {
+    if (state.loop) state.time = 0;
+    else { state.time = duration; togglePlay(); }
+  }
+  draw();
+  requestAnimationFrame(tick);
+}
+
+/* --------------------------------------------------------- deep links -- */
+// #t=2.03&cam=front&director=1 opens on a moment. Useful for pointing someone
+// at the exact frame an impact lands, and for screenshotting one.
+(function openAt() {
+  const q = new URLSearchParams(location.hash.slice(1));
+  if (q.has('t')) state.time = Math.min(Math.max(parseFloat(q.get('t')) || 0, 0), duration);
+  if (q.get('director') === '1' && DATA.shots.length) {
+    state.director = true;
+    document.getElementById('director').classList.add('on');
+  }
+  const views = { front: [0, 0.1], side: [Math.PI/2, 0.1], top: [0, 1.35], back: [Math.PI, 0.1] };
+  const view = views[q.get('cam')];
+  if (view) { cam.yaw = view[0]; cam.pitch = view[1]; }
+  if (q.has('dist')) cam.dist = parseFloat(q.get('dist')) || cam.dist;
+})();
+
+resize();
+draw();
+</script>
+</body>
+</html>

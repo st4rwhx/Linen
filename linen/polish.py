@@ -143,6 +143,15 @@ SYMMETRIC_OVERLAP = 0.6
 #: alone, so a settle moves what was moving rather than nudging the whole rig.
 SETTLE_SHARE = 0.05
 
+#: How much worse the wrap from last frame to first may be than an ordinary
+#: frame of the same clip, before looping it would show as a pop.
+#:
+#: Measured across a twelve-clip pack: every animation that returns to where it
+#: started came in under 2.8, and the two that end lying on the ground — a
+#: death and a collapse — came in at 13.7 and 13.5. Nothing lands between, so
+#: the threshold is set in the gap rather than tuned.
+LOOP_SEAM_RATIO = 5.0
+
 #: Leg chains, hip to ankle.
 LEG_CHAINS = {
     "Left": ("LeftUpperLeg", "LeftLowerLeg", "LeftFoot"),
@@ -583,6 +592,8 @@ def plant_feet(
         rotations=rotations,
         name=clip.name,
         metadata=dict(clip.metadata),
+        loop=clip.loop,
+        priority=clip.priority,
     )
     if clip.root_positions is not None:
         fixed.root_positions = clip.root_positions.copy()
@@ -1351,3 +1362,33 @@ def polish(
             result = planted
 
     return result, before, measure(result)
+
+
+# -- looping -----------------------------------------------------------------
+
+
+def loop_seam(clip: AnimationClip) -> float:
+    """How much the wrap costs, as a multiple of an ordinary frame.
+
+    A clip loops cleanly when going from its last frame back to its first is no
+    more of a jump than any other frame step. Expressed as a ratio rather than
+    an angle because the scale is the clip's own: a fast run moves 60 degrees a
+    frame and an idle moves one, and a fixed threshold in degrees would call the
+    run broken and the idle perfect whatever they actually do.
+
+    1.0 or below is seamless. Above :data:`LOOP_SEAM_RATIO` the wrap is a pop.
+    """
+    seam = step = 0.0
+    for track in clip.rotations.values():
+        if len(track) < 2:
+            continue
+        wrap = abs(float(np.dot(track[-1], track[0])))
+        seam += float(np.degrees(2.0 * np.arccos(min(wrap, 1.0))))
+        dots = np.abs(np.sum(track[:-1] * track[1:], axis=1)).clip(0.0, 1.0)
+        step += float(np.median(np.degrees(2.0 * np.arccos(dots))))
+    return seam / step if step > 1e-9 else 0.0
+
+
+def loops_cleanly(clip: AnimationClip) -> bool:
+    """Would looping this clip show a pop at the wrap?"""
+    return loop_seam(clip) <= LOOP_SEAM_RATIO

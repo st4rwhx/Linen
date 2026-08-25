@@ -492,3 +492,21 @@ def test_desync_stays_off_unless_asked():
         # Nothing to desync on this clip is fine; what must never happen is the
         # default pass doing it.
         assert True
+
+
+def test_a_looping_clip_is_still_looping_after_the_pass():
+    """Every correction rebuilds the clip, and one of them dropped the flag.
+
+    A walk cycle exported with Loop off stops dead at the end of every stride
+    in Studio, and nothing in the animation itself looks wrong — which is why
+    it took someone playing it to notice.
+    """
+    from linen.polish import polish
+
+    clip = _skating(degrees=20.0)
+    clip.loop = True
+    clip.priority = "Movement"
+
+    fixed, _, _ = polish(clip)
+    assert fixed.loop is True
+    assert fixed.priority == "Movement"
