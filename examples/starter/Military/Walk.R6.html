@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Militaire_Walk — Linen</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f25; --line: #2a2f37;
+    --ink: #e6e9ee; --dim: #8b93a1; --accent: #6ea8fe;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 14px; margin: 0; font-weight: 600; }
+  header .meta { color: var(--dim); font-size: 12px; }
+  main { flex: 1; position: relative; min-height: 0; }
+  canvas#stage { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas#stage:active { cursor: grabbing; }
+  #hud {
+    position: absolute; top: 10px; left: 12px; pointer-events: none;
+    font-variant-numeric: tabular-nums; color: var(--dim); font-size: 12px;
+  }
+  #fired {
+    position: absolute; top: 10px; right: 12px; pointer-events: none;
+    text-align: right; font-size: 12px; max-width: 40%;
+  }
+  #fired div { opacity: 0.9; }
+  #legend {
+    position: absolute; bottom: 10px; left: 12px; pointer-events: none;
+    color: var(--dim); font-size: 11px;
+  }
+  footer { border-top: 1px solid var(--line); background: var(--panel); }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; flex-wrap: wrap; }
+  button, select {
+    background: #262b33; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: #3d444f; }
+  button.on { background: var(--accent); color: #0d1117; border-color: var(--accent); }
+  label { color: var(--dim); display: inline-flex; align-items: center; gap: 6px; }
+  #time { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 128px; }
+  canvas#timeline { display: block; width: 100%; height: 92px; cursor: pointer; }
+  kbd {
+    background: #262b33; border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 4px; font: 11px ui-monospace, monospace;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Militaire_Walk</h1>
+  <span class="meta" id="summary"></span>
+</header>
+
+<main>
+  <canvas id="stage"></canvas>
+  <div id="hud"></div>
+  <div id="fired"></div>
+  <div id="legend">
+    glisser : tourner &nbsp;·&nbsp; molette : zoom &nbsp;·&nbsp; maj+glisser : déplacer
+    &nbsp;·&nbsp; <kbd>espace</kbd> lecture &nbsp;·&nbsp; <kbd>←</kbd><kbd>→</kbd> frame
+  </div>
+</main>
+
+<footer>
+  <canvas id="timeline"></canvas>
+  <div class="bar">
+    <button id="play">▶ Lecture</button>
+    <button id="loop" class="on">↻ Boucle</button>
+    <span id="time"></span>
+    <label>vitesse
+      <select id="speed">
+        <option value="0.1">0,1×</option>
+        <option value="0.25">0,25×</option>
+        <option value="0.5">0,5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+    <label id="skinpick" hidden>rig
+      <select id="skin"></select>
+    </label>
+    <button id="director">🎬 Caméra du réalisateur</button>
+    <button id="showset" class="on">Décor</button>
+    <button id="showgrid" class="on">Grille</button>
+    <button id="front">Face</button>
+    <button id="side">Profil</button>
+    <button id="top">Dessus</button>
+  </div>
+</footer>
+
+<script>
+const DATA = {"skins":[],"name":"Militaire_Walk","fps":30.0,"duration":1.0666666666666667,"frameCount":33,"rigs":{"R6":{"name":"R6","parts":[{"name":"HumanoidRootPart","parent":null,"joint":null,"size":[2.0,2.0,1.0],"pivot":[0.0,-1.0,0.0],"offsetFromPivot":[0.0,1.0,0.0]},{"name":"Torso","parent":"HumanoidRootPart","joint":"RootJoint","size":[2.0,2.0,1.0],"pivot":[0.0,-1.0,0.0],"offsetFromPivot":[0.0,1.0,0.0]},{"name":"Head","parent":"Torso","joint":"Neck","size":[2.0,1.0,1.0],"pivot":[0.0,1.0,0.0],"offsetFromPivot":[0.0,0.5,0.0]},{"name":"Left Arm","parent":"Torso","joint":"Left Shoulder","size":[1.0,2.0,1.0],"pivot":[-1.5,1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]},{"name":"Right Arm","parent":"Torso","joint":"Right Shoulder","size":[1.0,2.0,1.0],"pivot":[1.5,1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]},{"name":"Left Leg","parent":"Torso","joint":"Left Hip","size":[1.0,2.0,1.0],"pivot":[-0.5,-1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]},{"name":"Right Leg","parent":"Torso","joint":"Right Hip","size":[1.0,2.0,1.0],"pivot":[0.5,-1.0,0.0],"offsetFromPivot":[0.0,-1.0,0.0]}]}},"actors":[{"name":"Militaire_Walk","rig":"R6","position":[0.0,3.0,0.0],"yaw":0.0,"rotations":{"Torso":[0.0523,-0.03485,-0.00183,0.99802,0.0523,-0.03927,-0.00206,0.99786,0.05229,-0.04369,-0.00229,0.99767,0.05228,-0.04811,-0.00252,0.99747,0.05226,-0.05253,-0.00275,0.99725,0.05225,-0.05695,-0.00298,0.997,0.05224,-0.06137,-0.00322,0.99674,0.05222,-0.06578,-0.00345,0.99646,0.05221,-0.0702,-0.00368,0.99616,0.05219,-0.07461,-0.00391,0.99584,0.05217,-0.07902,-0.00414,0.9955,0.05215,-0.08343,-0.00437,0.99514,0.05213,-0.08784,-0.0046,0.99476,0.05211,-0.09225,-0.00483,0.99436,0.05209,-0.09665,-0.00507,0.99394,0.05207,-0.10106,-0.0053,0.9935,0.05206,-0.10331,-0.00541,0.99327,0.05208,-0.09891,-0.00518,0.99372,0.0521,-0.09451,-0.00495,0.99415,0.05212,-0.0901,-0.00472,0.99456,0.05214,-0.08569,-0.00449,0.99495,0.05216,-0.08128,-0.00426,0.99532,0.05218,-0.07687,-0.00403,0.99567,0.0522,-0.07246,-0.0038,0.996,0.05221,-0.06805,-0.00357,0.99631,0.05223,-0.06363,-0.00333,0.9966,0.05224,-0.05922,-0.0031,0.99687,0.05227,-0.05148,-0.0027,0.9973,0.05228,-0.0452,-0.00237,0.99761,0.05229,-0.04041,-0.00212,0.99781,0.0523,-0.03708,-0.00194,0.99794,0.0523,-0.03523,-0.00185,0.99801,0.0523,-0.03485,-0.00183,0.99802],"Head":[-0.01744,0.03489,-0.00061,0.99924,-0.01744,0.03932,-0.00069,0.99907,-0.01744,0.04375,-0.00076,0.99889,-0.01743,0.04817,-0.00084,0.99869,-0.01743,0.0526,-0.00092,0.99846,-0.01742,0.05702,-0.001,0.99822,-0.01742,0.06144,-0.00107,0.99796,-0.01741,0.06586,-0.00115,0.99768,-0.01741,0.07028,-0.00123,0.99737,-0.0174,0.0747,-0.0013,0.99705,-0.0174,0.07912,-0.00138,0.99671,-0.01739,0.08354,-0.00146,0.99635,-0.01738,0.08795,-0.00154,0.99597,-0.01738,0.09236,-0.00161,0.99557,-0.01737,0.09677,-0.00169,0.99515,-0.01736,0.10118,-0.00177,0.99472,-0.01736,0.10344,-0.00181,0.99448,-0.01737,0.09903,-0.00173,0.99493,-0.01737,0.09462,-0.00165,0.99536,-0.01738,0.09021,-0.00157,0.99577,-0.01739,0.0858,-0.0015,0.99616,-0.01739,0.08138,-0.00142,0.99653,-0.0174,0.07697,-0.00134,0.99688,-0.01741,0.07255,-0.00127,0.99721,-0.01741,0.06813,-0.00119,0.99752,-0.01742,0.06371,-0.00111,0.99782,-0.01742,0.05929,-0.00103,0.99809,-0.01743,0.05154,-0.0009,0.99852,-0.01743,0.04526,-0.00079,0.99882,-0.01744,0.04046,-0.00071,0.99903,-0.01744,0.03713,-0.00065,0.99916,-0.01744,0.03527,-0.00062,0.99923,-0.01744,0.03489,-0.00061,0.99924],"Left Arm":[0.32799,0.08781,0.22669,0.91287,0.3277,0.08574,0.22609,0.91332,0.32741,0.08368,0.22548,0.91376,0.32711,0.08162,0.22488,0.9142,0.32681,0.07955,0.22428,0.91464,0.32651,0.07749,0.22367,0.91507,0.32621,0.07542,0.22306,0.9155,0.32591,0.07335,0.22246,0.91592,0.32561,0.07129,0.22185,0.91634,0.3253,0.06922,0.22124,0.91676,0.32499,0.06716,0.22063,0.91717,0.32468,0.06509,0.22001,0.91757,0.32437,0.06302,0.2194,0.91797,0.32406,0.06095,0.21878,0.91837,0.32375,0.05888,0.21817,0.91876,0.32343,0.05682,0.21755,0.91915,0.32327,0.05576,0.21724,0.91935,0.32359,0.05782,0.21785,0.91896,0.3239,0.05989,0.21847,0.91857,0.32421,0.06196,0.21908,0.91818,0.32453,0.06403,0.2197,0.91778,0.32484,0.0661,0.22031,0.91737,0.32514,0.06816,0.22092,0.91697,0.32545,0.07023,0.22153,0.91656,0.32575,0.0723,0.22214,0.91614,0.32606,0.07436,0.22275,0.91572,0.32636,0.07643,0.22336,0.91529,0.32688,0.08005,0.22442,0.91454,0.3273,0.08297,0.22528,0.91391,0.32763,0.08521,0.22593,0.91343,0.32785,0.08677,0.22639,0.91309,0.32797,0.08763,0.22664,0.9129,0.32799,0.08781,0.22669,0.91287],"Right Arm":[0.10714,-0.07795,0.06989,0.98872,0.10695,-0.08014,0.06963,0.98858,0.10676,-0.08233,0.06937,0.98844,0.10657,-0.08452,0.06911,0.98829,0.10638,-0.0867,0.06884,0.98814,0.10619,-0.08889,0.06858,0.98799,0.10599,-0.09107,0.06832,0.98783,0.1058,-0.09326,0.06805,0.98766,0.10561,-0.09544,0.06779,0.98749,0.10541,-0.09763,0.06753,0.98732,0.10522,-0.09981,0.06726,0.98714,0.10502,-0.10199,0.067,0.98695,0.10483,-0.10418,0.06673,0.98677,0.10463,-0.10636,0.06647,0.98657,0.10443,-0.10854,0.0662,0.98637,0.10424,-0.11072,0.06593,0.98617,0.10414,-0.11184,0.0658,0.98606,0.10433,-0.10966,0.06606,0.98627,0.10453,-0.10748,0.06633,0.98647,0.10473,-0.10529,0.06659,0.98667,0.10492,-0.10311,0.06686,0.98686,0.10512,-0.10093,0.06713,0.98704,0.10531,-0.09875,0.06739,0.98723,0.10551,-0.09656,0.06765,0.9874,0.1057,-0.09438,0.06792,0.98758,0.10589,-0.09219,0.06818,0.98774,0.10609,-0.09001,0.06845,0.98791,0.10642,-0.08618,0.06891,0.98818,0.1067,-0.08308,0.06928,0.98839,0.1069,-0.0807,0.06956,0.98854,0.10705,-0.07906,0.06976,0.98865,0.10713,-0.07814,0.06987,0.9887,0.10714,-0.07795,0.06989,0.98872],"Left Leg":[0.1993,0.00522,-0.02565,0.97959,0.17646,0.00462,-0.02577,0.98396,0.15353,0.00402,-0.02587,0.9878,0.13051,0.00342,-0.02595,0.9911,0.10742,0.00281,-0.02603,0.99387,0.02352,0.00403,-0.02875,0.9993,-0.03803,0.00446,-0.03047,0.9988,-0.03867,0.00313,-0.02972,0.99881,-0.03927,0.00184,-0.02905,0.9988,-0.03982,0.00064,-0.02848,0.9988,-0.04034,-0.00054,-0.02798,0.99879,-0.04083,-0.00171,-0.02756,0.99878,-0.04129,-0.00287,-0.02721,0.99877,-0.04174,-0.00402,-0.02694,0.99876,-0.04216,-0.00518,-0.02674,0.99874,-0.04257,-0.00634,-0.02663,0.99872,-0.04234,-0.0069,-0.02661,0.99873,-0.04013,-0.00554,-0.02674,0.99882,-0.03792,-0.0042,-0.02695,0.99891,-0.03569,-0.00285,-0.02723,0.99899,-0.03342,-0.0015,-0.02758,0.99906,-0.0311,-0.00014,-0.028,0.99912,-0.02869,0.00124,-0.02849,0.99918,-0.02619,0.00265,-0.02904,0.99923,-0.0236,0.00393,-0.02962,0.99927,-0.02098,0.00495,-0.03014,0.99931,0.0393,0.00428,-0.02841,0.99881,0.12949,0.00339,-0.02596,0.99124,0.15592,0.00408,-0.02586,0.98742,0.17607,0.00461,-0.02577,0.98403,0.18999,0.00498,-0.0257,0.98144,0.19772,0.00518,-0.02566,0.97991,0.1993,0.00522,-0.02565,0.97959],"Right Leg":[-0.0379,0.00743,0.02699,0.99889,-0.03574,0.00607,0.02721,0.99897,-0.03357,0.00471,0.02747,0.99905,-0.03137,0.00336,0.02776,0.99912,-0.02911,0.00199,0.02808,0.99918,-0.02679,0.00062,0.02843,0.99924,-0.02438,-0.00077,0.0288,0.99929,-0.02186,-0.00218,0.02921,0.99933,-0.01923,-0.00356,0.02963,0.99937,-0.01659,-0.00457,0.02998,0.9994,-0.01385,-0.00559,0.03033,0.99943,0.05003,-0.00478,0.0284,0.99833,0.12957,-0.00339,0.02596,0.99122,0.14821,-0.00388,0.02589,0.98861,0.1668,-0.00437,0.02581,0.98564,0.18533,-0.00485,0.02572,0.98233,0.19374,-0.00507,0.02568,0.9807,0.17088,-0.00447,0.02579,0.98494,0.14792,-0.00387,0.02589,0.98865,0.12489,-0.00327,0.02597,0.99183,0.02635,-0.00504,0.02982,0.9992,-0.04982,-0.00594,0.03258,0.99821,-0.05038,-0.00454,0.03179,0.99821,-0.05091,-0.00318,0.03106,0.99821,-0.05143,-0.00188,0.03039,0.99821,-0.05194,-0.00064,0.02978,0.99821,-0.05244,0.00056,0.02922,0.9982,-0.05398,0.00261,0.02833,0.99814,-0.05505,0.00424,0.0277,0.99809,-0.05567,0.00549,0.0273,0.99806,-0.05583,0.00636,0.02708,0.99805,-0.05551,0.00686,0.027,0.99807,-0.05472,0.00699,0.02705,0.99811]},"root":null}],"set":[],"shots":[],"cues":[],"events":[],"tension":[]};
+
+/* ---------------------------------------------------------------- maths -- */
+const IDENT = [1,0,0, 0,1,0, 0,0,1];
+
+function matMul(a, b) {
+  const o = new Array(9);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+    o[r*3+c] = a[r*3]*b[c] + a[r*3+1]*b[3+c] + a[r*3+2]*b[6+c];
+  }
+  return o;
+}
+function matVec(m, v) {
+  return [
+    m[0]*v[0] + m[1]*v[1] + m[2]*v[2],
+    m[3]*v[0] + m[4]*v[1] + m[5]*v[2],
+    m[6]*v[0] + m[7]*v[1] + m[8]*v[2],
+  ];
+}
+function add(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+function sub(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+function scale(a, k) { return [a[0]*k, a[1]*k, a[2]*k]; }
+function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function cross(a, b) {
+  return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+}
+function norm(a) {
+  const n = Math.hypot(a[0], a[1], a[2]) || 1;
+  return [a[0]/n, a[1]/n, a[2]/n];
+}
+// Quaternion xyzw to a rotation matrix, matching linen.math3d.quat_to_mat.
+function quatToMat(x, y, z, w) {
+  const xx = x*x, yy = y*y, zz = z*z;
+  const xy = x*y, xz = x*z, yz = y*z, wx = w*x, wy = w*y, wz = w*z;
+  return [
+    1-2*(yy+zz),   2*(xy-wz),   2*(xz+wy),
+      2*(xy+wz), 1-2*(xx+zz),   2*(yz-wx),
+      2*(xz-wy),   2*(yz+wx), 1-2*(xx+yy),
+  ];
+}
+function yawMat(deg) {
+  const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  // Turns the rig's -Z forward onto the heading the Studio script gives it.
+  return [c, 0, s, 0, 1, 0, -s, 0, c];
+}
+
+/* ------------------------------------------------- forward kinematics ---- */
+// The same chain the exporter and the Studio player walk: a joint frame at the
+// pivot that the pose rotates, then the part's centre offset inside it.
+function poseAt(rig, actor, frame) {
+  const placed = {};
+  for (const part of rig.parts) {
+    const track = actor.rotations[part.name];
+    let local = IDENT;
+    if (track) {
+      const i = frame * 4;
+      local = quatToMat(track[i], track[i+1], track[i+2], track[i+3]);
+    }
+    if (part.parent === null) {
+      let root = [0, 0, 0];
+      if (actor.root) root = [actor.root[frame*3], actor.root[frame*3+1], actor.root[frame*3+2]];
+      placed[part.name] = { p: root, r: local };
+      continue;
+    }
+    const parent = placed[part.parent];
+    const joint = add(parent.p, matVec(parent.r, part.pivot));
+    const r = matMul(parent.r, local);
+    placed[part.name] = { p: add(joint, matVec(r, part.offsetFromPivot)), r: r };
+  }
+  return placed;
+}
+
+/* ------------------------------------------------------------ geometry -- */
+const CORNERS = [
+  [-.5,-.5,-.5], [.5,-.5,-.5], [.5,.5,-.5], [-.5,.5,-.5],
+  [-.5,-.5,.5], [.5,-.5,.5], [.5,.5,.5], [-.5,.5,.5],
+];
+const FACES = [
+  [0,1,2,3], [5,4,7,6], [4,0,3,7], [1,5,6,2], [3,2,6,7], [4,5,1,0],
+];
+const LIGHT = norm([0.4, 0.85, 0.45]);
+
+const PALETTE = [
+  [110, 168, 254], [232, 143, 106], [143, 217, 143],
+  [201, 154, 232], [232, 184, 75], [127, 209, 232],
+];
+
+/* -------------------------------------------------------------- camera -- */
+const cam = { yaw: 0.55, pitch: 0.22, dist: 16, target: [0, 3, -2], fov: 45 };
+
+function orbitEye() {
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  return add(cam.target, [
+    cam.dist * cp * Math.sin(cam.yaw),
+    cam.dist * sp,
+    cam.dist * cp * Math.cos(cam.yaw),
+  ]);
+}
+
+function basis(eye, target) {
+  const f = norm(sub(target, eye));
+  let r = cross(f, [0, 1, 0]);
+  if (Math.hypot(r[0], r[1], r[2]) < 1e-6) r = [1, 0, 0];
+  r = norm(r);
+  return { f: f, r: r, u: cross(r, f) };
+}
+
+/* --------------------------------------------------------------- state -- */
+const stage = document.getElementById('stage');
+const ctx = stage.getContext('2d');
+const timeline = document.getElementById('timeline');
+const tctx = timeline.getContext('2d');
+
+const state = {
+  time: 0, playing: false, loop: true, speed: 1,
+  director: false, showSet: true, showGrid: true,
+  //: Index into DATA.skins, or -1 for the plain boxes a Block Rig really is.
+  skin: DATA.skins.length ? 0 : -1,
+};
+const frames = Math.max(DATA.frameCount, 1);
+const duration = DATA.duration || (frames - 1) / (DATA.fps || 30);
+
+document.getElementById('summary').textContent =
+  `${DATA.actors.length} acteur(s) · ${duration.toFixed(2)} s · ${DATA.fps} fps` +
+  (DATA.cues.length ? ` · ${DATA.cues.length} cues` : '') +
+  (DATA.events.length ? ` · ${DATA.events.length} événements` : '');
+
+// Frame the cast on load, so nothing opens off-screen.
+(function frameCast() {
+  if (!DATA.actors.length) return;
+  let lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  for (const a of DATA.actors) for (let i = 0; i < 3; i++) {
+    lo[i] = Math.min(lo[i], a.position[i]); hi[i] = Math.max(hi[i], a.position[i]);
+  }
+  cam.target = [(lo[0]+hi[0])/2, (lo[1]+hi[1])/2 + 1, (lo[2]+hi[2])/2];
+  const span = Math.max(hi[0]-lo[0], hi[2]-lo[2], 4);
+  cam.dist = span + 12;
+})();
+
+/* -------------------------------------------------------------- render -- */
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  for (const [c, h] of [[stage, stage.clientHeight], [timeline, timeline.clientHeight]]) {
+    c.width = Math.max(c.clientWidth * dpr, 1);
+    c.height = Math.max(h * dpr, 1);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', () => { resize(); draw(); });
+
+function activeShot(t) {
+  if (!DATA.shots.length) return null;
+  let current = null;
+  for (const e of DATA.events) {
+    if (e.kind !== 'camera' || e.t > t) continue;
+    const shot = DATA.shots.find(s => e.label === 'plan ' + s.id);
+    if (shot) current = { shot: shot, at: e.t };
+  }
+  return current || { shot: DATA.shots[0], at: 0 };
+}
+
+function subjectPosition(name, placed) {
+  const actor = DATA.actors.find(a => a.name === name);
+  if (actor) {
+    const p = placed[actor.name];
+    const head = p && (p['Head'] || p['UpperTorso'] || p['Torso']);
+    if (head) return worldOf(actor, head.p);
+    return [actor.position[0], actor.position[1] + 1.5, actor.position[2]];
+  }
+  const piece = DATA.set.find(s => s.name === name);
+  if (piece) return piece.position;
+  return cam.target;
+}
+
+function worldOf(actor, local) {
+  return add(actor.position, matVec(yawMat(actor.yaw), local));
+}
+
+function draw() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#14161a';
+  ctx.fillRect(0, 0, w, h);
+
+  const frame = Math.min(Math.round(state.time * DATA.fps), frames - 1);
+  const placed = {};
+  for (const actor of DATA.actors) {
+    placed[actor.name] = poseAt(DATA.rigs[actor.rig], actor, frame);
+  }
+
+  let eye, target, fov = cam.fov;
+  if (state.director && DATA.shots.length) {
+    const cut = activeShot(state.time);
+    eye = cut.shot.position.slice();
+    const drift = cut.shot.drift || [0, 0, 0];
+    // Every shot drifts, exactly as the Studio player tweens it.
+    const k = Math.min((state.time - cut.at) / 4, 1);
+    eye = add(eye, scale(drift, k));
+    target = subjectPosition(cut.shot.lookAt, placed);
+    fov = cut.shot.fov;
+  } else {
+    eye = orbitEye();
+    target = cam.target;
+  }
+
+  const b = basis(eye, target);
+  const focal = (h / 2) / Math.tan(fov * Math.PI / 360);
+  const quads = [];
+
+  function project(p) {
+    const d = sub(p, eye);
+    const z = dot(d, b.f);
+    if (z < 0.2) return null;
+    return { x: w/2 + dot(d, b.r) * focal / z, y: h/2 - dot(d, b.u) * focal / z, z: z };
+  }
+
+  // The floor is painted in its own pass, before everything else. Sorting it
+  // with the rest by centroid depth puts its near edge in front of the actors
+  // standing on it — a big quad's centroid can be nearer than a small object
+  // genuinely in front of it. Nothing is ever under the ground, so this is
+  // correct by construction rather than a fudge.
+  const ground = [];
+
+  function box(centre, rot, size, rgb, alpha, into) {
+    const bucket = into || quads;
+    const world = CORNERS.map(c =>
+      add(centre, matVec(rot, [c[0]*size[0], c[1]*size[1], c[2]*size[2]])));
+    const screen = world.map(project);
+    for (const face of FACES) {
+      const pts = face.map(i => screen[i]);
+      if (pts.some(p => p === null)) continue;
+      const a = world[face[0]], bb = world[face[1]], cc = world[face[2]];
+      const n = norm(cross(sub(bb, a), sub(cc, bb)));
+      // Back-face cull, so interior faces never paint over the silhouette.
+      if (dot(n, sub(a, eye)) > 0) continue;
+      const shade = 0.42 + 0.58 * Math.max(dot(n, LIGHT), 0);
+      bucket.push({
+        pts: pts,
+        depth: (pts[0].z + pts[1].z + pts[2].z + pts[3].z) / 4,
+        fill: `rgba(${Math.round(rgb[0]*shade)},${Math.round(rgb[1]*shade)},` +
+              `${Math.round(rgb[2]*shade)},${alpha})`,
+      });
+    }
+  }
+
+  if (state.showSet) {
+    for (const piece of DATA.set) {
+      const floor = piece.kind === 'sol';
+      box(piece.position, IDENT, piece.size, [92, 98, 110], 0.9, floor ? ground : quads);
+    }
+  }
+  ground.sort((p, q) => q.depth - p.depth);
+  paint(ground);
+
+  if (state.showGrid) drawGrid(project);
+
+  // A skin replaces a part's box with real geometry. Its vertices are already
+  // in that part's local space, scaled into that part's box, so it rides the
+  // exact same transform the box does and cannot come apart at the joints.
+  function skinned(centre, rot, geometry, rgb) {
+    const verts = geometry.vertices, tris = geometry.triangles;
+    const world = new Array(verts.length / 3);
+    for (let i = 0; i < world.length; i++) {
+      world[i] = add(centre, matVec(rot, [verts[i*3], verts[i*3+1], verts[i*3+2]]));
+    }
+    const screen = world.map(project);
+    for (let t = 0; t < tris.length; t += 3) {
+      const a = screen[tris[t]], b2 = screen[tris[t+1]], c2 = screen[tris[t+2]];
+      if (!a || !b2 || !c2) continue;
+      const wa = world[tris[t]], wb = world[tris[t+1]], wc = world[tris[t+2]];
+      const n = norm(cross(sub(wb, wa), sub(wc, wb)));
+      if (dot(n, sub(wa, eye)) > 0) continue;
+      const shade = 0.42 + 0.58 * Math.max(dot(n, LIGHT), 0);
+      quads.push({
+        pts: [a, b2, c2],
+        depth: (a.z + b2.z + c2.z) / 3,
+        fill: `rgb(${Math.round(rgb[0]*shade)},${Math.round(rgb[1]*shade)},` +
+              `${Math.round(rgb[2]*shade)})`,
+      });
+    }
+  }
+
+  const skin = DATA.skins[state.skin] || null;
+
+  DATA.actors.forEach((actor, index) => {
+    const rgb = PALETTE[index % PALETTE.length];
+    const rig = DATA.rigs[actor.rig];
+    const yaw = yawMat(actor.yaw);
+    for (const part of rig.parts) {
+      if (part.parent === null) continue;  // HumanoidRootPart is invisible in game
+      const local = placed[actor.name][part.name];
+      const centre = add(actor.position, matVec(yaw, local.p));
+      const rot = matMul(yaw, local.r);
+      const geometry = skin && skin.rig === actor.rig ? skin.parts[part.name] : null;
+      if (geometry) skinned(centre, rot, geometry, rgb);
+      else box(centre, rot, part.size, rgb, 1);
+    }
+  });
+
+  quads.sort((p, q) => q.depth - p.depth);
+  paint(quads);
+
+  // Name every actor and every set piece, so the view matches the build sheet.
+  ctx.font = '12px ui-sans-serif, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  DATA.actors.forEach((actor, index) => {
+    const p = placed[actor.name]['Head'] || placed[actor.name]['Torso'];
+    if (!p) return;
+    const s = project(add(worldOf(actor, p.p), [0, 1.2, 0]));
+    if (!s) return;
+    const rgb = PALETTE[index % PALETTE.length];
+    ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    ctx.fillText(actor.name, s.x, s.y);
+  });
+  if (state.showSet) {
+    ctx.fillStyle = '#8b93a1';
+    for (const piece of DATA.set) {
+      const s = project(add(piece.position, [0, piece.size[1] / 2 + 0.6, 0]));
+      if (s) ctx.fillText(piece.name, s.x, s.y);
+    }
+  }
+  ctx.textAlign = 'left';
+
+  drawHud(frame);
+  drawTimeline();
+}
+
+function paint(quads) {
+  for (const quad of quads) {
+    ctx.beginPath();
+    ctx.moveTo(quad.pts[0].x, quad.pts[0].y);
+    for (let i = 1; i < quad.pts.length; i++) ctx.lineTo(quad.pts[i].x, quad.pts[i].y);
+    ctx.closePath();
+    ctx.fillStyle = quad.fill;
+    ctx.fill();
+  }
+}
+
+function drawGrid(project) {
+  const y = groundLevel();
+  const half = 20, step = 4;
+  ctx.strokeStyle = 'rgba(120,132,150,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = -half; i <= half; i += step) {
+    for (const seg of [
+      [[i, y, -half], [i, y, half]],
+      [[-half, y, i], [half, y, i]],
+    ]) {
+      const a = project(seg[0]), b = project(seg[1]);
+      if (!a || !b) continue;
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+    }
+  }
+  ctx.stroke();
+}
+
+function groundLevel() {
+  const floor = DATA.set.find(s => s.kind === 'sol');
+  if (floor) return floor.position[1] + floor.size[1] / 2;
+  return 0;
+}
+
+function drawHud(frame) {
+  const hud = document.getElementById('hud');
+  const cut = state.director ? activeShot(state.time) : null;
+  hud.innerHTML =
+    `frame ${frame} / ${frames - 1} &nbsp; ${state.time.toFixed(2)} s` +
+    (cut ? `<br>plan « ${cut.shot.id} » · ${cut.shot.fov}° · vise ${cut.shot.lookAt}` : '') +
+    (DATA.tension.length ? `<br>tension ${tensionAt(state.time).toFixed(2)}` : '');
+
+  // Anything that fired in the last third of a second, newest first.
+  const recent = DATA.events
+    .filter(e => e.t <= state.time && state.time - e.t < 0.35)
+    .slice(-6).reverse();
+  document.getElementById('fired').innerHTML = recent.map(e => {
+    const fade = 1 - (state.time - e.t) / 0.35;
+    const colour = LANE_COLOURS[e.kind] || '#9aa4b2';
+    const who = e.actor ? `${e.actor} · ` : '';
+    return `<div style="color:${colour};opacity:${(0.35 + 0.65*fade).toFixed(2)}">` +
+           `${who}${escapeHtml(e.label)}</div>`;
+  }).join('');
+}
+
+const LANE_COLOURS = {"camera": "#e8b84b", "line": "#7fd1e8", "face": "#c99ae8", "prop": "#8fd98f", "vfx": "#e88f6a", "sound": "#9aa4b2", "spot": "#9aa4b2"};
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+function tensionAt(t) {
+  const curve = DATA.tension;
+  if (!curve.length) return 0;
+  if (t <= curve[0][0]) return curve[0][1];
+  for (let i = 0; i < curve.length - 1; i++) {
+    if (t < curve[i+1][0]) {
+      const span = curve[i+1][0] - curve[i][0] || 1;
+      const k = (t - curve[i][0]) / span;
+      return curve[i][1] + (curve[i+1][1] - curve[i][1]) * k;
+    }
+  }
+  return curve[curve.length - 1][1];
+}
+
+/* ------------------------------------------------------------ timeline -- */
+function drawTimeline() {
+  const w = timeline.clientWidth, h = timeline.clientHeight;
+  tctx.clearRect(0, 0, w, h);
+  const pad = 14;
+  const span = Math.max(duration, 0.001);
+  const x = t => pad + (w - 2*pad) * (t / span);
+
+  // Tension behind everything: the shape of the scene at a glance.
+  if (DATA.tension.length) {
+    tctx.beginPath();
+    tctx.moveTo(x(0), h - 4);
+    for (const [t, v] of DATA.tension) tctx.lineTo(x(t), h - 4 - v * (h - 30));
+    tctx.lineTo(x(span), h - 4);
+    tctx.closePath();
+    tctx.fillStyle = 'rgba(110,168,254,0.13)';
+    tctx.fill();
+  }
+
+  // One lane per actor, showing what they are doing.
+  const actors = DATA.actors.map(a => a.name);
+  const laneH = 13;
+  actors.forEach((name, i) => {
+    const y = 8 + i * (laneH + 3);
+    tctx.fillStyle = 'rgba(255,255,255,0.04)';
+    tctx.fillRect(pad, y, w - 2*pad, laneH);
+    const rgb = PALETTE[i % PALETTE.length];
+    for (const cue of DATA.cues.filter(c => c.actor === name)) {
+      tctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.42)`;
+      tctx.fillRect(x(cue.start), y, Math.max(x(cue.stop) - x(cue.start), 2), laneH);
+      tctx.fillStyle = '#e6e9ee';
+      tctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+      tctx.save();
+      tctx.beginPath();
+      tctx.rect(x(cue.start) + 3, y, Math.max(x(cue.stop) - x(cue.start) - 6, 0), laneH);
+      tctx.clip();
+      tctx.fillText(cue.what, x(cue.start) + 4, y + 10);
+      tctx.restore();
+    }
+  });
+
+  // Event ticks, tall for authored beats and short for spotted sound.
+  const base = h - 4;
+  for (const e of DATA.events) {
+    const tall = e.kind !== 'spot' && e.kind !== 'sound';
+    tctx.strokeStyle = LANE_COLOURS[e.kind] || '#9aa4b2';
+    tctx.globalAlpha = tall ? 0.95 : 0.55;
+    tctx.lineWidth = tall ? 2 : 1;
+    tctx.beginPath();
+    tctx.moveTo(x(e.t), base);
+    tctx.lineTo(x(e.t), base - (tall ? 22 : 11));
+    tctx.stroke();
+  }
+  tctx.globalAlpha = 1;
+
+  tctx.strokeStyle = '#ffffff';
+  tctx.lineWidth = 1.5;
+  tctx.beginPath();
+  tctx.moveTo(x(state.time), 2);
+  tctx.lineTo(x(state.time), h - 2);
+  tctx.stroke();
+
+  document.getElementById('time').textContent =
+    `${state.time.toFixed(2)} / ${span.toFixed(2)} s`;
+}
+
+function seekFromEvent(ev) {
+  const rect = timeline.getBoundingClientRect();
+  const pad = 14;
+  const k = (ev.clientX - rect.left - pad) / Math.max(rect.width - 2*pad, 1);
+  state.time = Math.min(Math.max(k, 0), 1) * duration;
+  draw();
+}
+timeline.addEventListener('pointerdown', ev => {
+  timeline.setPointerCapture(ev.pointerId);
+  seekFromEvent(ev);
+  timeline.onpointermove = seekFromEvent;
+});
+timeline.addEventListener('pointerup', ev => {
+  timeline.onpointermove = null;
+  timeline.releasePointerCapture(ev.pointerId);
+});
+
+/* -------------------------------------------------------------- input -- */
+let drag = null;
+stage.addEventListener('pointerdown', ev => {
+  drag = { x: ev.clientX, y: ev.clientY, pan: ev.shiftKey || ev.button === 2 };
+  stage.setPointerCapture(ev.pointerId);
+});
+stage.addEventListener('pointermove', ev => {
+  if (!drag) return;
+  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  drag.x = ev.clientX; drag.y = ev.clientY;
+  if (drag.pan) {
+    const b = basis(orbitEye(), cam.target);
+    const k = cam.dist / 600;
+    cam.target = add(cam.target, add(scale(b.r, -dx * k), scale(b.u, dy * k)));
+  } else {
+    cam.yaw -= dx * 0.008;
+    cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.006));
+  }
+  draw();
+});
+stage.addEventListener('pointerup', ev => {
+  drag = null;
+  stage.releasePointerCapture(ev.pointerId);
+});
+stage.addEventListener('contextmenu', ev => ev.preventDefault());
+stage.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  cam.dist = Math.max(2, Math.min(120, cam.dist * (1 + Math.sign(ev.deltaY) * 0.12)));
+  draw();
+}, { passive: false });
+
+function toggle(id, key, after) {
+  const el = document.getElementById(id);
+  el.addEventListener('click', () => {
+    state[key] = !state[key];
+    el.classList.toggle('on', state[key]);
+    if (after) after();
+    draw();
+  });
+}
+toggle('loop', 'loop');
+toggle('director', 'director');
+toggle('showset', 'showSet');
+toggle('showgrid', 'showGrid');
+
+// The rig picker only appears when there is a choice to make.
+(function skinPicker() {
+  if (!DATA.skins.length) return;
+  const pick = document.getElementById('skinpick');
+  const select = document.getElementById('skin');
+  pick.hidden = false;
+  DATA.skins.forEach((s, i) => {
+    const option = document.createElement('option');
+    option.value = String(i);
+    option.textContent = s.name;
+    select.appendChild(option);
+  });
+  const boxes = document.createElement('option');
+  boxes.value = '-1';
+  boxes.textContent = 'Boîtes (Block Rig)';
+  select.appendChild(boxes);
+  select.value = String(state.skin);
+  select.addEventListener('change', ev => {
+    state.skin = parseInt(ev.target.value, 10);
+    draw();
+  });
+})();
+
+document.getElementById('play').addEventListener('click', togglePlay);
+document.getElementById('speed').addEventListener('change', ev => {
+  state.speed = parseFloat(ev.target.value);
+});
+for (const [id, yaw, pitch] of [['front', 0, 0.1], ['side', Math.PI/2, 0.1], ['top', 0, 1.35]]) {
+  document.getElementById(id).addEventListener('click', () => {
+    cam.yaw = yaw; cam.pitch = pitch; state.director = false;
+    document.getElementById('director').classList.remove('on');
+    draw();
+  });
+}
+
+function togglePlay() {
+  state.playing = !state.playing;
+  document.getElementById('play').textContent = state.playing ? '❚❚ Pause' : '▶ Lecture';
+  document.getElementById('play').classList.toggle('on', state.playing);
+  if (state.playing) { last = performance.now(); requestAnimationFrame(tick); }
+}
+
+window.addEventListener('keydown', ev => {
+  if (ev.code === 'Space') { ev.preventDefault(); togglePlay(); }
+  else if (ev.code === 'ArrowLeft') {
+    state.time = Math.max(0, state.time - 1 / DATA.fps); draw();
+  } else if (ev.code === 'ArrowRight') {
+    state.time = Math.min(duration, state.time + 1 / DATA.fps); draw();
+  } else if (ev.code === 'Home') { state.time = 0; draw(); }
+});
+
+let last = performance.now();
+function tick(now) {
+  if (!state.playing) return;
+  state.time += (now - last) / 1000 * state.speed;
+  last = now;
+  if (state.time > duration) {
+    if (state.loop) state.time = 0;
+    else { state.time = duration; togglePlay(); }
+  }
+  draw();
+  requestAnimationFrame(tick);
+}
+
+/* --------------------------------------------------------- deep links -- */
+// #t=2.03&cam=front&director=1 opens on a moment. Useful for pointing someone
+// at the exact frame an impact lands, and for screenshotting one.
+(function openAt() {
+  const q = new URLSearchParams(location.hash.slice(1));
+  if (q.has('t')) state.time = Math.min(Math.max(parseFloat(q.get('t')) || 0, 0), duration);
+  if (q.get('director') === '1' && DATA.shots.length) {
+    state.director = true;
+    document.getElementById('director').classList.add('on');
+  }
+  const views = { front: [0, 0.1], side: [Math.PI/2, 0.1], top: [0, 1.35], back: [Math.PI, 0.1] };
+  const view = views[q.get('cam')];
+  if (view) { cam.yaw = view[0]; cam.pitch = view[1]; }
+  if (q.has('dist')) cam.dist = parseFloat(q.get('dist')) || cam.dist;
+})();
+
+resize();
+draw();
+</script>
+</body>
+</html>

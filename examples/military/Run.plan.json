@@ -1,0 +1,17 @@
+{
+ "name": "Militaire_Run",
+ "fps": 30,
+ "loop": true,
+ "priority": "Movement",
+ "notes": "Avance tactique : arme plaquee, buste penche, tete de niveau.",
+ "segments": [
+  {
+   "start": 0.0,
+   "end": 1.29,
+   "cycle": "mil_advance",
+   "rate": 1.55,
+   "easing": "linear",
+   "blend_in": 0.0
+  }
+ ]
+}

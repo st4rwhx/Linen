@@ -1,0 +1,23 @@
+{
+ "name": "Militaire_Land",
+ "fps": 30,
+ "loop": false,
+ "priority": "Movement",
+ "notes": "Reception : le genou encaisse, puis le corps remonte au low ready.",
+ "segments": [
+  {
+   "start": 0.0,
+   "end": 0.16,
+   "pose": "mil_absorb",
+   "easing": "ease_out",
+   "blend_in": 0.03
+  },
+  {
+   "start": 0.16,
+   "end": 0.55,
+   "pose": "mil_settle",
+   "easing": "overshoot",
+   "blend_in": 0.1
+  }
+ ]
+}

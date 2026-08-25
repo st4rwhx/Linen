@@ -1,0 +1,17 @@
+{
+ "name": "Militaire_Walk",
+ "fps": 30,
+ "loop": true,
+ "priority": "Movement",
+ "notes": "Patrouille : genoux souples, foulee courte, arme immobile.",
+ "segments": [
+  {
+   "start": 0.0,
+   "end": 1.05,
+   "cycle": "mil_patrol",
+   "rate": 0.952,
+   "easing": "linear",
+   "blend_in": 0.0
+  }
+ ]
+}

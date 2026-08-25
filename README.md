@@ -17,6 +17,11 @@ prompt texte, sans coût d'API.
 > **[`docs/MODE_EMPLOI.md`](docs/MODE_EMPLOI.md)** : l'installation, chaque
 > commande, ce qu'elle fait vraiment, et où sont les limites.
 >
+> **Un jeu militaire ?**
+> **[`examples/starter/Military/`](examples/starter/Military/)** — `Idle`,
+> `Walk`, `Run`, `Jump`, `Fall`, `Land` en style militaire d'élite, R15 et R6,
+> prêtes à importer. L'arme possède le haut du corps : c'est ça, le style.
+>
 > **Tu veux être meilleur qu'un animateur pro ?**
 > **[`docs/FINITION.md`](docs/FINITION.md)** : `--polish` mesure le patinage
 > des pieds en studs et le ramène à 0,05 — sur de la vraie mocap studio. Un

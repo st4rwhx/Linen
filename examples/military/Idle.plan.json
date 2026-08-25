@@ -1,0 +1,16 @@
+{
+ "name": "Militaire_Idle",
+ "fps": 30,
+ "loop": true,
+ "priority": "Idle",
+ "notes": "Arme au low ready, poids sur la jambe droite, deux balayages par boucle.",
+ "segments": [
+  {
+   "start": 0.0,
+   "end": 6.0,
+   "cycle": "mil_watch",
+   "rate": 0.1667,
+   "easing": "ease_in_out"
+  }
+ ]
+}

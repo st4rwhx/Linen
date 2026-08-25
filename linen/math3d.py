@@ -332,3 +332,4 @@ def cframe_components(position: np.ndarray, rotation: np.ndarray) -> list[float]
 
 IDENTITY_ROTATION = np.eye(3)
 ZERO_POSITION = np.zeros(3)
+

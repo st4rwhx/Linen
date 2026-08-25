@@ -40,11 +40,22 @@ from .clip import AnimationClip
 from .math3d import mat_to_quat, quat_to_mat
 from .rigs.kinematics import place_rotations
 
-#: How far above the stance level a sole may sit and still count as planted, as
-#: a fraction of the rig's standing height. The same test the sound spotter
-#: uses to place a footstep, for the same reason: a footstep and a foot plant
-#: are the same event.
+#: The most a sole may sit above the stance level and still count as planted,
+#: as a fraction of the rig's standing height.
 PLANT_HEIGHT = 0.07
+
+#: The least, for the same. Between the two, the threshold is a share of how
+#: high the feet in *this* clip actually get.
+PLANT_HEIGHT_FLOOR = 0.012
+
+#: That share. A plant is the bottom quarter of a foot's own travel.
+#:
+#: A fixed threshold was the first version and it works on capture, where feet
+#: lift high, and fails on a composed cycle, where they do not: a synthesised
+#: run lifted its feet 0.7 studs and the fixed 0.35 called half the swing a
+#: plant. Six plants in a 1.3-second cycle, and the correction dutifully nailed
+#: a foot to the floor in mid-air.
+PLANT_SHARE = 0.25
 
 #: A plant shorter than this is noise — a toe brushing past, not weight on the
 #: ground — and locking it would fight the motion rather than clean it.
@@ -98,6 +109,25 @@ CORNER_WINDOW = 0.04
 #: Below this speed, in standing heights per second, a direction change means
 #: nothing — a part that is barely moving can point anywhere.
 CORNER_SPEED = 0.4
+
+#: A corner only counts if the part is still moving this fast through it,
+#: relative to the travel either side.
+#:
+#: Without it the metric flags every extremum of every swing: a hand at the end
+#: of its arc reverses by 180 degrees by definition, and a composed cycle
+#: reversed at exactly 179 on every key. That is not a broken arc, it is what
+#: the end of a swing is — and the tell is that the hand has stopped there. A
+#: genuine kink happens at speed.
+CORNER_MOVING = 0.45
+
+#: Three or more corners at a near-constant spacing are the *structure* of the
+#: motion, not damage to it: a composed cycle reverses its limbs at every key,
+#: by design. Chasing those grinds the cycle down instead of repairing it, so
+#: they are reported and left alone. A one-off corner is what gets fixed.
+CORNER_PERIODIC = 3
+
+#: How closely the gaps have to match to count as periodic, as a share.
+CORNER_PERIODIC_SLACK = 0.25
 
 #: A corner is treated as noise only if its neighbours are this much calmer.
 #: A real change of direction — a punch landing, a foot striking — takes
@@ -289,18 +319,20 @@ def _plants(clip: AnimationClip, placed) -> list[Plant]:
     soles = {part: np.array([_sole(clip, frame, part) for frame in placed]) for part in feet}
     lower = np.minimum.reduce([values[:, 1] for values in soles.values()])
     stance = float(np.median(lower))
-    lift = PLANT_HEIGHT * _standing_height(clip.rig)
+    height = _standing_height(clip.rig)
+    peak = max(float(np.percentile(np.concatenate([v[:, 1] for v in soles.values()]), 95)) - stance, 0.0)
+    lift = float(
+        np.clip(PLANT_SHARE * peak, PLANT_HEIGHT_FLOOR * height, PLANT_HEIGHT * height)
+    )
 
     grounded = {part: values[:, 1] <= stance + lift for part, values in soles.items()}
     shortest = max(round(MIN_PLANT_SECONDS * clip.fps), 2)
 
     spans: list[tuple[str, int, int]] = []
     for part, flags in grounded.items():
-        spans += [
-            (part, start, stop)
-            for start, stop in _runs(flags)
-            if stop - start >= shortest
-        ]
+        found = [span for span in _runs(flags) if span[1] - span[0] >= shortest]
+        merged = _merge(found, soles[part][:, 1], stance + 2.0 * lift)
+        spans += [(part, start, stop) for start, stop in merged]
 
     drift = _ground_velocity(soles, spans)
 
@@ -356,6 +388,34 @@ def _ground_velocity(
     return velocity
 
 
+def _merge(
+    spans: list[tuple[int, int]], height: np.ndarray, ceiling: float
+) -> list[tuple[int, int]]:
+    """Join plants of one foot that never actually left the ground between them.
+
+    Judged on **height, not elapsed time**. A gap is real flight only if the
+    sole rose clear during it; a foot that rocks up a few hundredths of a stud
+    and settles has not taken a step, whatever the gap lasted.
+
+    Getting this wrong is not a harmless over-count. Each plant fits its own
+    target line, and where two of their blends overlap the corrections pull the
+    same frame in different directions — measured at 18 degrees in a single
+    frame on a rocking clip, introduced by the pass whose whole job is to keep
+    the motion smooth.
+    """
+    if not spans:
+        return []
+    merged = [spans[0]]
+    for start, stop in spans[1:]:
+        last_start, last_stop = merged[-1]
+        gap = height[last_stop:start]
+        if len(gap) == 0 or float(gap.max()) < ceiling:
+            merged[-1] = (last_start, stop)
+        else:
+            merged.append((start, stop))
+    return merged
+
+
 def _runs(flags: np.ndarray) -> list[tuple[int, int]]:
     """Maximal half-open ranges where ``flags`` is true."""
     out: list[tuple[int, int]] = []
@@ -385,6 +445,13 @@ _HINGES = (
 #: as bending backwards rather than simply being extended.
 BACKWARDS_STUDS = 0.05
 
+#: How straight a limb has to be for the question to mean anything, in degrees
+#: away from straight. A folded elbow cannot be hyperextending — it is folded —
+#: and judging it anyway flagged every rifle carry in the military pose book,
+#: because a hand held at the chest puts the shoulder-to-hand line nearly
+#: vertical and the elbow off to one side of it.
+BACKWARDS_FOLD_DEGREES = 45.0
+
 
 def _hyperextension(clip: AnimationClip, placed) -> dict[str, int]:
     """Frames where a knee or elbow bends the wrong way.
@@ -412,6 +479,17 @@ def _hyperextension(clip: AnimationClip, placed) -> dict[str, int]:
             root = _joint_positions(clip, frame, upper)
             joint = _joint_positions(clip, frame, middle)
             end = _joint_positions(clip, frame, tip)
+
+            upper_bone = joint - root
+            lower_bone = end - joint
+            scale = np.linalg.norm(upper_bone) * np.linalg.norm(lower_bone)
+            if scale < 1e-9:
+                continue
+            bend = np.degrees(
+                np.arccos(np.clip(upper_bone @ lower_bone / scale, -1.0, 1.0))
+            )
+            if bend > BACKWARDS_FOLD_DEGREES:
+                continue
 
             line = end - root
             length = float(np.linalg.norm(line))
@@ -523,8 +601,9 @@ def plant_feet(
         # frames a plant most needs fixed are its first and last, where the
         # foot arrives and leaves, and a fade there leaves the visible skate
         # untouched while correcting the middle nobody was looking at.
-        low = max(plant.start - blend_frames, 0)
-        high = min(plant.stop + blend_frames, clip.frame_count)
+        low = max(plant.start - blend_frames, 0, _edge(before.plants, plant, -1))
+        high = min(plant.stop + blend_frames, clip.frame_count,
+                   _edge(before.plants, plant, 1))
 
         # One hinge for the whole plant, read from the frame where the knee is
         # most bent. Reading it per frame was the first version, and a knee
@@ -550,6 +629,21 @@ def plant_feet(
                 rotations[part][frame] = _slerp(rotations[part][frame], target, weight)
 
     return fixed, before
+
+
+def _edge(plants: list[Plant], plant: Plant, direction: int) -> int:
+    """How far a plant's blend may reach before it meets the next one.
+
+    Halfway to its neighbour on the same foot, so two corrections never write
+    the same frame. Merging already removes the short gaps; this covers what is
+    left, and costs nothing when there is no neighbour.
+    """
+    same = [other for other in plants if other.part == plant.part and other is not plant]
+    if direction < 0:
+        before = [other.stop for other in same if other.stop <= plant.start]
+        return 0 if not before else (max(before) + plant.start + 1) // 2
+    after = [other.start for other in same if other.start >= plant.stop]
+    return 1 << 30 if not after else (min(after) + plant.stop) // 2
 
 
 def _chain_for(foot: str) -> tuple[str, str, str] | None:
@@ -1001,7 +1095,9 @@ def _corners(clip: AnimationClip, placed) -> dict[str, dict[int, float]]:
     frames and shows up as a sustained turn.
     """
     height = _standing_height(clip.rig)
-    window = max(round(CORNER_WINDOW * clip.fps), 1)
+    # Never one frame: at 30 fps a 40 ms window rounds to a single frame, which
+    # is the per-frame comparison this constant exists to avoid.
+    window = max(round(CORNER_WINDOW * clip.fps), 2)
     floor = CORNER_SPEED * height * window / max(clip.fps, 1e-6)
 
     out: dict[str, dict[int, float]] = {}
@@ -1025,11 +1121,17 @@ def _corners(clip: AnimationClip, placed) -> dict[str, dict[int, float]]:
         )
         turn = np.where(moving, np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))), 0.0)
 
+        # Speed through the corner, as a share of the travel either side of it.
+        through = np.minimum(size_before, size_after)
+        around = np.maximum(size_before, size_after)
+        carrying = through > CORNER_MOVING * np.maximum(around, 1e-12)
+
         found: dict[int, float] = {}
         for offset in range(1, len(turn) - 1):
             neighbours = max(turn[offset - 1], turn[offset + 1])
             if (
                 turn[offset] >= CORNER_DEGREES
+                and carrying[offset]
                 and neighbours < turn[offset] * CORNER_ISOLATION
             ):
                 found[int(index[offset])] = float(turn[offset])
@@ -1078,9 +1180,17 @@ def smooth_arcs(clip: AnimationClip) -> AnimationClip:
     for _ in range(ARC_PASSES):
         placed = _walk(result)
         corners = _corners(result, placed)
+        # The guard is about heel strike and toe-off, so it applies to feet and
+        # to nothing else. Applied to every extremity it also shielded a hand
+        # whose corner happened to fall near someone's footfall, which has no
+        # relationship to it at all.
         guarded = _contact_frames(_plants(result, placed))
         targets = {
-            part: [frame for frame in frames if frame not in guarded]
+            part: [
+                frame
+                for frame in _off_beat(sorted(frames))
+                if not (part.endswith("Foot") and frame in guarded)
+            ]
             for part, frames in corners.items()
         }
         if not any(targets.values()):
@@ -1108,6 +1218,45 @@ def smooth_arcs(clip: AnimationClip) -> AnimationClip:
         if clip.root_positions is not None:
             result.root_positions = clip.root_positions.copy()
     return result
+
+
+def _off_beat(frames: list[int]) -> list[int]:
+    """Drop the corners that fall on the motion's own beat, keep the strays.
+
+    A composed cycle turns its limbs round at every key, so those corners
+    repeat at a steady interval. They are the shape of the motion and smoothing
+    them is not a repair — it is sanding the animation flat, and every number
+    in the report would call that a success.
+
+    Judged per corner rather than all-or-nothing, because one stray frame among
+    a dozen regular ones is exactly the case worth fixing, and an all-or-nothing
+    test lets the stray disqualify the whole set.
+
+    A stray that lands within the slack of a key is not separated from it, and
+    is not claimed to be: at a fifteen-frame beat that is a window of about four
+    frames either side, and inside it the two are the same event as far as any
+    measurement here can tell.
+    """
+    if len(frames) < CORNER_PERIODIC:
+        return list(frames)
+
+    gaps = np.diff(frames)
+    beat = float(np.median(gaps))
+    if beat <= 0:
+        return list(frames)
+
+    slack = CORNER_PERIODIC_SLACK * beat
+    origin = frames[0]
+    kept = []
+    for frame in frames:
+        # Distance to the nearest point on the beat's own grid, rather than to
+        # whichever corner happens to sit next door: a stray one gap away from
+        # a key would otherwise be excused by its far neighbour.
+        offset = (frame - origin) % beat
+        if min(offset, beat - offset) <= slack:
+            continue
+        kept.append(frame)
+    return kept
 
 
 def _contact_frames(plants: list[Plant]) -> set[int]:
@@ -1188,6 +1337,17 @@ def polish(
     result = smooth_arcs(result)
     if allow_desync:
         result = desync(result)
-    result, _ = plant_feet(result)
+
+    # Planting is kept only if it actually plants. A composed cycle has no true
+    # stance — the pose book never holds a foot still — so what the detector
+    # finds there is a swing passing low, and nailing it down made a walk three
+    # times worse than it started. The guard is unconditional on purpose: a
+    # pass that promises an improvement should be unable to deliver the
+    # opposite, whatever the reason.
+    planted, _ = plant_feet(result)
+    if planted is not result:
+        loose, tight = measure(result), measure(planted)
+        if tight.mean_slide <= loose.mean_slide and tight.worst_slide <= loose.worst_slide:
+            result = planted
 
     return result, before, measure(result)

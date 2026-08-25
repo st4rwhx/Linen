@@ -1,0 +1,23 @@
+{
+ "name": "Militaire_Fall",
+ "fps": 30,
+ "loop": true,
+ "priority": "Movement",
+ "notes": "Chute libre : jambes qui cherchent le sol, arme serree contre la poitrine.",
+ "segments": [
+  {
+   "start": 0.0,
+   "end": 0.45,
+   "pose": "mil_airborne",
+   "easing": "ease_in_out",
+   "blend_in": 0.0
+  },
+  {
+   "start": 0.45,
+   "end": 0.9,
+   "pose": "mil_high_ready",
+   "easing": "ease_in_out",
+   "blend_in": 0.2
+  }
+ ]
+}

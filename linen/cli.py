@@ -35,9 +35,13 @@ def main(argv: list[str] | None = None) -> int:
     _add_scene(sub)
     _add_library(sub)
     sub.add_parser("providers", help="show which LLM providers are configured")
-    sub.add_parser("vocabulary", help="list the pose and cycle names a plan may use")
+    _add_vocabulary(
+        sub.add_parser("vocabulary", help="list the pose and cycle names a plan may use")
+    )
 
     args = parser.parse_args(argv)
+    _load_vocabularies(getattr(args, "vocabulary", None))
+
     handler = {
         "retarget": _cmd_retarget,
         "bvh": _cmd_bvh,
@@ -143,6 +147,32 @@ def _add_common_output(parser: argparse.ArgumentParser) -> None:
     )
 
 
+#: Extra pose vocabularies, by the name ``--vocabulary`` takes.
+VOCABULARIES = ("military",)
+
+
+def _add_vocabulary(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--vocabulary",
+        action="append",
+        default=None,
+        choices=VOCABULARIES,
+        help=(
+            "load an extra pose vocabulary. Repeatable. Off by default and "
+            "deliberately: registering one globally changed what every other "
+            "prompt resolved to, which is not what asking for one style means"
+        ),
+    )
+
+
+def _load_vocabularies(names: list[str] | None) -> None:
+    for name in names or ():
+        if name == "military":
+            from .generate import military
+
+            military.register()
+
+
 def _add_duration(parser: argparse.ArgumentParser) -> None:
     """Duration controls, for the commands that compose rather than record."""
     from .generate.timing import DURATION_PRESETS, STRATEGIES
@@ -207,6 +237,7 @@ def _add_bvh(sub) -> None:
 def _add_prompt(sub) -> None:
     parser = sub.add_parser("prompt", help="text -> motion plan -> Roblox animation")
     parser.add_argument("text", help="what the animation should do")
+    _add_vocabulary(parser)
     parser.add_argument("--fps", type=float, default=30.0)
     parser.add_argument("--seed", type=int, default=0)
     _add_duration(parser)
@@ -253,6 +284,7 @@ def _add_prompt(sub) -> None:
 def _add_synth(sub) -> None:
     parser = sub.add_parser("synth", help="motion plan JSON -> Roblox animation, no network")
     parser.add_argument("plan", type=Path, help="a motion plan written by hand or by `prompt`")
+    _add_vocabulary(parser)
     parser.add_argument("--seed", type=int, default=0)
     _add_duration(parser)
     _add_common_output(parser)
