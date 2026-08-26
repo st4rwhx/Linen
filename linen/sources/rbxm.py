@@ -37,6 +37,17 @@ class RbxmError(ValueError):
     """A file that cannot be read, phrased for whoever exported it."""
 
 
+class UnknownProperty(RbxmError):
+    """A property whose type this reader has no decoder for.
+
+    This is the one failure that is safe to skip: an animation needs `Name`,
+    `CFrame`, `Time` and the easing, and a file carrying a `Font` or a
+    `SecurityCapabilities` beside them is still perfectly readable. Every other
+    failure means a column this reader claimed to understand did not decode,
+    and skipping those is how an animation silently arrives empty.
+    """
+
+
 @dataclass
 class Instance:
     """One object out of the file, with its properties and its children."""
@@ -165,22 +176,58 @@ def _ints(data: bytes, count: int) -> np.ndarray:
     return (signed >> 1) ^ (-(signed & 1))
 
 
-def _special(identifier: int) -> np.ndarray | None:
-    """The axis-aligned rotation an id stands for, if any.
+#: The six axis-aligned unit vectors, in the order the format numbers them.
+_AXES = (
+    (1.0, 0.0, 0.0),
+    (0.0, 1.0, 0.0),
+    (0.0, 0.0, 1.0),
+    (-1.0, 0.0, 0.0),
+    (0.0, -1.0, 0.0),
+    (0.0, 0.0, -1.0),
+)
 
-    The format can write one of 24 axis-aligned rotations as a single byte
-    instead of nine floats. Across the 5989 pose CFrames this was built
-    against, **not one** used it — animation poses are rarely axis-aligned — so
-    rather than ship a table nothing here exercised, an id that does appear
-    raises and says what it needs.
+
+def _rotation_ids() -> dict[int, np.ndarray]:
+    """The axis-aligned rotations the format writes as a single byte.
+
+    A CFrame whose rotation happens to be axis-aligned is stored as one id
+    instead of nine floats, and the id is built from the first two rows of the
+    matrix: ``first * 6 + second + 1``, indexing the six unit vectors above.
+    Rows that are parallel describe no rotation and are skipped, which is what
+    leaves the 24 ids the format documents, running from 0x02 to 0x23 — and
+    both ends of that range fall out of this arithmetic rather than being
+    asserted, which is the check that the formula is the right one.
+
+    Only ``0x02`` — the identity — has been seen in a real animation, across
+    every file this was built against. The identity is its own transpose, so
+    that much is convention-proof; the other 23 entries assume the id is built
+    from rows, the order the nine floats are stored in.
     """
+    table: dict[int, np.ndarray] = {}
+    for first, row in enumerate(_AXES):
+        for second, column in enumerate(_AXES):
+            third = np.cross(row, column)
+            if not third.any():  # parallel rows describe no rotation
+                continue
+            table[first * 6 + second + 1] = np.array([row, column, third])
+    return table
+
+
+ROTATION_IDS = _rotation_ids()
+
+
+def _special(identifier: int) -> np.ndarray | None:
+    """The axis-aligned rotation an id stands for, or ``None`` for nine floats."""
     if identifier == 0:
         return None
-    raise RbxmError(
-        f"CFrame uses the packed rotation id {identifier}, which this reader "
-        f"does not decode. It has never been seen in an animation; send the "
-        f"file and the table can be added against it."
-    )
+    rotation = ROTATION_IDS.get(identifier)
+    if rotation is None:
+        raise RbxmError(
+            f"CFrame carries the packed rotation id {identifier:#04x}, which is "
+            f"outside the {min(ROTATION_IDS):#04x}-{max(ROTATION_IDS):#04x} the "
+            f"format defines — the file is not being read where it is claimed."
+        )
+    return rotation
 
 
 def _values(kind: int, data: bytes, offset: int, count: int):
@@ -231,13 +278,21 @@ def _values(kind: int, data: bytes, offset: int, count: int):
         stacked = np.stack(positions, axis=1) if count else np.zeros((0, 3))
         return list(zip(rotations, stacked, strict=False)), offset
 
-    raise RbxmError(f"property type {kind:#04x} is not one this reader handles")
+    raise UnknownProperty(f"property type {kind:#04x} is not one this reader handles")
 
 
 def read_rbxm(path: str | Path) -> list[Instance]:
     """Every root instance in a binary model file."""
     path = Path(path)
     data = path.read_bytes()
+    if not data:
+        # An archive that could not decompress this entry leaves a name and no
+        # bytes. Saying "not a Roblox model" of an empty file sends whoever
+        # reads it looking at the wrong thing.
+        raise RbxmError(
+            f"{path.name}: the file is empty — 0 bytes. It did not come out of "
+            f"whatever archive it was in; re-export it, or send it as a .zip."
+        )
     if not data.startswith(MAGIC):
         raise RbxmError(
             f"{path.name}: not a binary Roblox model. An XML .rbxmx starts with "
@@ -270,8 +325,8 @@ def read_rbxm(path: str | Path) -> list[Instance]:
             _, referents = classes[index]
             try:
                 values, _ = _values(kind, body, offset, len(referents))
-            except (RbxmError, struct.error, IndexError):
-                continue
+            except UnknownProperty:
+                continue  # a type no animation needs; the rest of the file stands
             for referent, value in zip(referents, values, strict=False):
                 instances[int(referent)].properties[prop] = value
 

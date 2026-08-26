@@ -205,7 +205,13 @@ def _write_pose(
     else:
         position = np.zeros(3)
         track = matrices.get(part.name)
-        rotation = np.eye(3) if track is None else track[frame]
+        local = np.eye(3) if track is None else track[frame]
+        # A pose is the joint's ``Motor6D.Transform``, measured in the frame the
+        # joint was built in — not in the part's own axes. On R15 the two are
+        # the same and this is a no-op; on R6 it is the quarter turn that keeps
+        # a forward step from coming out sideways.
+        frame_axes = np.asarray(part.joint_frame, dtype=float)
+        rotation = frame_axes.T @ local @ frame_axes
 
     _cframe(properties, "CFrame", position, rotation)
     _token(properties, "EasingDirection", easing_direction)

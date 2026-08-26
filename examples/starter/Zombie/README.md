@@ -45,6 +45,33 @@ in-place` si tu n'es pas d'accord.
 extraits sur 436 Ko annoncés). Ce n'est pas la conversion, c'est le `.rar`.
 `zombie_biting_2` couvre le même mouvement.
 
+## Pourquoi les R6 ne ressemblaient pas à la page
+
+**R6 ne mesure pas ses rotations dans les axes de la part.** Roblox compose une
+articulation en `parent * C0 * Transform * C1:Inverse()`. R15 construit chaque
+articulation alignée sur les axes, donc son `Transform` **est** la rotation
+locale et s'écrit tel quel. R6 construit ses épaules et ses hanches **tournées
+d'un quart de tour autour de Y**, et sa nuque et sa racine tournées autour de la
+diagonale Y/Z.
+
+Résultat : sur R6, une jambe qui part **en avant** est stockée comme une
+rotation autour du **Z** de la pose, pas de son X. L'exportateur écrivait la
+rotation locale directement — le fichier s'importe, il se joue, et le pas part
+**de côté**. C'est exactement l'écart que tu as vu entre la page et Studio :
+la page, elle, compose les rotations locales, donc elle était juste.
+
+Ça se lit dans les animations que Roblox a écrites lui-même : sur les cycles de
+course et d'accroupissement de ton propre jeu, les jambes sont à **0,85-0,99 de
+Z**, alors que le torse — dont l'articulation est tournée autrement — est sur X.
+
+Corrigé pour l'export `.rbxmx` **et** pour les sauvegardes Moon, avec cinq tests
+et un test de bout en bout qui compare la page et le fichier **à travers** le
+repère de l'articulation. Tous les `.R6.rbxmx` de ce dossier ont été régénérés.
+
+> Les `.R15.rbxmx` n'ont jamais été touchés par ce bug : sur R15 la
+> transformation est l'identité. C'est pour ça que le `Walk.rbxmx` R15 que tu as
+> testé en premier marchait.
+
 ## Deux choses trouvées sur tes fichiers
 
 **Le drapeau de boucle se perdait.** `plant_feet` reconstruisait le clip sans

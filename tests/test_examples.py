@@ -117,6 +117,15 @@ def test_the_file_moves_like_the_page_beside_it(rbxmx: Path) -> None:
         for part, track in actor["rotations"].items()
     }
 
+    # The page carries each joint's local rotation; the file carries the same
+    # rotation seen from the frame the joint was built in. On R15 those are the
+    # same thing. On R6 they differ by a quarter turn, and comparing the two
+    # raw would either pass a wrong file or fail a right one.
+    from linen.rigs import get_rig
+
+    rig = get_rig("R6" if "Left Arm" in actor["rotations"] else "R15")
+    frames_of = {part.name: np.asarray(part.joint_frame, dtype=float) for part in rig.parts}
+
     worst = 0.0
     compared = 0
     for time, poses in _keyframes(rbxmx):
@@ -126,7 +135,8 @@ def test_the_file_moves_like_the_page_beside_it(rbxmx: Path) -> None:
             if track is None:  # the root carries no rotation of its own
                 continue
             assert frame < len(track), f"{rbxmx.name} runs past the page at {time:.2f}s"
-            expected = quat_to_mat(track[frame][None])[0]
+            axes = frames_of.get(part, np.eye(3))
+            expected = axes.T @ quat_to_mat(track[frame][None])[0] @ axes
             cosine = (np.trace(expected.T @ matrix) - 1.0) / 2.0
             worst = max(worst, float(np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))))
             compared += 1

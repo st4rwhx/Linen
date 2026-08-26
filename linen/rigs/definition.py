@@ -9,8 +9,12 @@ valid animation, only its topology.  Sizes live here purely so the viewport can
 draw something recognisable.
 
 Both stock rigs rest with every part axis-aligned — arms and legs hang straight
-down — so a part's rest rotation is the identity and the pose we export is
-exactly the local rotation we solve for.
+down — so a part's rest *orientation* is the identity.  What is **not** the
+identity on R6 is the frame the joint measures its rotation in: a ``Motor6D``
+applies its ``Transform`` between ``C0`` and ``C1``, and R6 builds its shoulders
+and hips with those turned a quarter turn about Y and its neck and root turned
+about the diagonal.  R15 builds every joint axis-aligned, which is why R15 can
+be written straight out and R6 cannot.  See :attr:`Part.joint_frame`.
 """
 
 from __future__ import annotations
@@ -19,6 +23,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 Vec3 = tuple[float, float, float]
+Mat3 = tuple[Vec3, Vec3, Vec3]
+
+IDENTITY: Mat3 = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 
 
 class Roll(str, Enum):
@@ -64,6 +71,18 @@ class Part:
     #: must describe the same pair of directions or every limb comes out
     #: mirrored.  Must not be colinear with ``aim_axis``.
     roll_axis: Vec3 = (1.0, 0.0, 0.0)
+    #: Rotation of this joint's ``Motor6D.C0`` — the frame its ``Transform`` is
+    #: measured in, relative to the parent part.
+    #:
+    #: Roblox composes a joint as ``parent * C0 * Transform * C1:Inverse()``, so
+    #: the rotation that actually reaches the limb is ``C0 · Transform · C0ᵀ``
+    #: whenever ``C0`` and ``C1`` share a rotation, which on both stock rigs they
+    #: do.  On R15 that rotation is the identity and ``Transform`` *is* the local
+    #: rotation.  On R6 it is a quarter turn, and writing the local rotation
+    #: straight into the pose turns every joint about the wrong axis: a leg that
+    #: should step forward splays sideways instead.  The file still imports and
+    #: still plays, which is why this is only ever caught by looking.
+    joint_frame: Mat3 = IDENTITY
     #: Approximate rest size in studs. Preview only — never used for export.
     size: Vec3 = (1.0, 1.0, 1.0)
     #: Offset from the parent part's centre to this part's centre in the rest

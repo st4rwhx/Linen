@@ -15,7 +15,13 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import pytest
 
-from linen.convert import R6_TO_R15, ConvertError, classify, convert_file
+from linen.convert import (
+    R6_TO_R15,
+    ConvertError,
+    classify,
+    convert_file,
+    convert_r6_to_r15,
+)
 from linen.sources.rbxm import MAGIC, RbxmError, lz4_decompress, read_rbxm
 
 
@@ -85,9 +91,14 @@ def _prop_bool(index: int, name: str, values: list[bool]) -> bytes:
     )
 
 
-def _prop_cframe(index: int, name: str, frames: list[tuple[np.ndarray, tuple]]) -> bytes:
+def _prop_cframe(
+    index: int, name: str, frames: list[tuple[np.ndarray, tuple]], packed_first: bool = False
+) -> bytes:
     body = b""
-    for rotation, _ in frames:
+    for position, (rotation, _) in enumerate(frames):
+        if packed_first and position == 0:
+            body += b"\x02"  # the packed id for the identity
+            continue
         body += b"\x00" + struct.pack("<9f", *np.asarray(rotation).reshape(-1))
     for axis in range(3):
         body += _rotate_floats([float(position[axis]) for _, position in frames])
@@ -109,7 +120,9 @@ def _pitch(degrees: float) -> np.ndarray:
     return np.array([[1.0, 0.0, 0.0], [0.0, cos, -sin], [0.0, sin, cos]])
 
 
-def write_rbxm(path, *, parts=("Torso", "Left Arm"), angles=(0.0, 30.0), loop=True) -> None:
+def write_rbxm(
+    path, *, parts=("Torso", "Left Arm"), angles=(0.0, 30.0), loop=True, packed_first=False
+) -> None:
     """A one-keyframe R6 animation, built by hand.
 
     ``HumanoidRootPart`` roots the pose tree, the named parts hang off the
@@ -134,6 +147,7 @@ def write_rbxm(path, *, parts=("Torso", "Left Arm"), angles=(0.0, 30.0), loop=Tr
                 "CFrame",
                 [(np.eye(3), (0.0, 0.0, 0.0))]
                 + [(_pitch(angle), (0.0, 0.0, 0.0)) for angle in angles],
+                packed_first,
             ),
             _prnt(
                 [(0, -1), (1, 0), (pose_refs[0], 1)]
@@ -295,3 +309,56 @@ def test_a_held_object_ends_up_on_the_hand(tmp_path):
     report = convert_file(source, tmp_path / "out.rbxmx")
     assert "Handle" in report.carried
     assert "Handle" not in R6_TO_R15, "it is not a body part and keeps its name"
+
+
+# --- the joint frames -------------------------------------------------------
+
+
+def test_a_packed_rotation_id_decodes_instead_of_stopping_the_column(tmp_path):
+    """Roblox writes an axis-aligned rotation as one byte, and animations do.
+
+    Every rest pose in a hand-keyed animation is exactly the identity, so the
+    packed form appears in almost every file a game has. Refusing it did not
+    lose one pose — it lost the whole property column, and every pose in the
+    file arrived at rest with nothing raised anywhere.
+    """
+    path = tmp_path / "packed.rbxm"
+    write_rbxm(path, parts=("Torso", "Left Arm"), angles=(0.0, 30.0), packed_first=True)
+    poses = {p.name: p for p in read_rbxm(path)[0].of_class("Pose")}
+    assert np.allclose(poses["Torso"].properties["CFrame"][0], np.eye(3))
+    assert not np.allclose(poses["Left Arm"].properties["CFrame"][0], np.eye(3)), (
+        "the neighbouring pose lost its rotation with it"
+    )
+
+
+def test_converting_moves_the_rotation_out_of_the_r6_joint_frame(tmp_path):
+    """An R6 arm swinging forward is stored about Z; R15 wants it about X.
+
+    Copy the numbers across unchanged — which is what renaming the parts does —
+    and the file imports, plays, and swings the arm out sideways instead.
+    """
+    from linen.rigs import get_rig
+
+    axes = np.asarray(get_rig("R6").part("Left Arm").joint_frame, dtype=float)
+    forward = _pitch(30.0)
+
+    path = tmp_path / "swing.rbxm"
+    # Store the swing the way Roblox stores it: seen from the joint's frame.
+    write_rbxm(path, parts=("Torso", "Left Arm"), angles=(0.0, 30.0))
+    source = {p.name: p for p in read_rbxm(path)[0].of_class("Pose")}
+    stored = np.asarray(source["Left Arm"].properties["CFrame"][0])
+    assert np.allclose(stored, forward), "the fixture is not what this test assumes"
+
+    tree, _ = convert_r6_to_r15(read_rbxm(path)[0])
+    for pose in (i for i in tree.getroot().iter("Item") if i.get("class") == "Pose"):
+        if pose.find("Properties/string[@name='Name']").text != "LeftUpperArm":
+            continue
+        cframe = pose.find("Properties/CoordinateFrame[@name='CFrame']")
+        got = np.array(
+            [[float(cframe.find(f"R{r}{c}").text) for c in range(3)] for r in range(3)]
+        )
+        assert np.allclose(got, axes @ forward @ axes.T, atol=1e-6), (
+            "the R6 joint frame was not taken off on the way to R15"
+        )
+        return
+    raise AssertionError("LeftUpperArm never reached the converted tree")

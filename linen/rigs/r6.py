@@ -19,15 +19,47 @@ from .definition import BoneSource, Part, RigDefinition, Roll
 _UP = (0.0, 1.0, 0.0)
 _DOWN = (0.0, -1.0, 0.0)
 
+# The frames R6 measures its joint rotations in — the rotation half of each
+# ``Motor6D.C0``, which R6 shares with its ``C1``.  R15 has none of this: every
+# R15 joint is built axis-aligned, so its poses are local rotations as written.
+#
+# Shoulders and hips are turned a quarter turn about Y, so a limb swinging
+# forwards is stored as a rotation about the pose's **Z**, not its X.  That is
+# visible in any R6 animation Roblox itself wrote: across the run and crouch
+# cycles in `examples/`, the legs are 0.85-0.99 Z-dominant while the torso,
+# whose joint is turned differently, is X-dominant.  Writing the local rotation
+# straight out sends a forward step sideways.
+_LEFT_LIMB = ((0.0, 0.0, -1.0), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0))
+_RIGHT_LIMB = ((0.0, 0.0, 1.0), (0.0, 1.0, 0.0), (-1.0, 0.0, 0.0))
+# Root and neck: a half turn about the diagonal between +Y and +Z, which leaves
+# a forward lean on X and sends a yaw to Z.
+_SPINE = ((-1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0))
+
 PARTS: tuple[Part, ...] = (
     Part("HumanoidRootPart", None, None, aim_axis=_UP, size=(2.0, 2.0, 1.0)),
-    Part("Torso", "HumanoidRootPart", "RootJoint", aim_axis=_UP, size=(2.0, 2.0, 1.0)),
-    Part("Head", "Torso", "Neck", aim_axis=_UP, size=(2.0, 1.0, 1.0), rest_offset=(0.0, 1.5, 0.0)),
+    Part(
+        "Torso",
+        "HumanoidRootPart",
+        "RootJoint",
+        aim_axis=_UP,
+        joint_frame=_SPINE,
+        size=(2.0, 2.0, 1.0),
+    ),
+    Part(
+        "Head",
+        "Torso",
+        "Neck",
+        aim_axis=_UP,
+        joint_frame=_SPINE,
+        size=(2.0, 1.0, 1.0),
+        rest_offset=(0.0, 1.5, 0.0),
+    ),
     Part(
         "Left Arm",
         "Torso",
         "Left Shoulder",
         aim_axis=_DOWN,
+        joint_frame=_LEFT_LIMB,
         size=(1.0, 2.0, 1.0),
         rest_offset=(-1.5, 0.0, 0.0),
     ),
@@ -36,6 +68,7 @@ PARTS: tuple[Part, ...] = (
         "Torso",
         "Right Shoulder",
         aim_axis=_DOWN,
+        joint_frame=_RIGHT_LIMB,
         size=(1.0, 2.0, 1.0),
         rest_offset=(1.5, 0.0, 0.0),
     ),
@@ -44,6 +77,7 @@ PARTS: tuple[Part, ...] = (
         "Torso",
         "Left Hip",
         aim_axis=_DOWN,
+        joint_frame=_LEFT_LIMB,
         size=(1.0, 2.0, 1.0),
         rest_offset=(-0.5, -2.0, 0.0),
     ),
@@ -52,6 +86,7 @@ PARTS: tuple[Part, ...] = (
         "Torso",
         "Right Hip",
         aim_axis=_DOWN,
+        joint_frame=_RIGHT_LIMB,
         size=(1.0, 2.0, 1.0),
         rest_offset=(0.5, -2.0, 0.0),
     ),

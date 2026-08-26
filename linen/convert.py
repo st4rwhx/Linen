@@ -69,6 +69,25 @@ R15_PARENT = _r15_parents()
 #: part that reaches the same place is the hand.
 HELD_BY = {"LeftUpperArm": "LeftHand", "RightUpperArm": "RightHand"}
 
+
+def _r6_frames() -> dict[str, np.ndarray]:
+    """The frame each R6 joint measures its rotation in, by part name.
+
+    R6 builds its shoulders and hips a quarter turn about Y and its root and
+    neck a half turn about the Y/Z diagonal, so an R6 pose is not the local
+    rotation — it is that rotation seen from a turned frame. R15 builds every
+    joint axis-aligned, so moving a pose across means taking it out of the R6
+    frame and leaving it there. Copy the numbers straight over instead and the
+    limb turns about the wrong axis: a step goes sideways, a lean becomes a
+    twist.
+    """
+    from .rigs import get_rig
+
+    return {part.name: np.asarray(part.joint_frame, dtype=float) for part in get_rig("R6").parts}
+
+
+R6_FRAMES = _r6_frames()
+
 _IDENTITY = np.eye(3)
 _ROBLOX_ATTRS = {
     "xmlns:xmime": "http://www.w3.org/2005/05/xmlmime",
@@ -244,6 +263,9 @@ def _pose(parent: ET.Element, name: str, source: Instance | None, referents) -> 
             matrix, offset = cframe
             rotation = _IDENTITY if matrix is None else np.asarray(matrix, dtype=float)
             position = np.asarray(offset, dtype=float)
+            axes = R6_FRAMES.get(source.name)
+            if axes is not None:
+                rotation = axes @ rotation @ axes.T
         easing_style = int(source.properties.get("EasingStyle", 0) or 0)
         easing_direction = int(source.properties.get("EasingDirection", 1) or 1)
         weight = float(source.properties.get("Weight", 1.0) or 1.0)

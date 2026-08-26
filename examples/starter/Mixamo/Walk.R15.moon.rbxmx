@@ -23,7 +23,7 @@ local motion: Motion = {
 	Name = "Walk",
 	FPS = 29.99999,
 	Length = 29,
-	Looped = false,
+	Looped = true,
 
 	Tracks = {
 		["Head"] = {

@@ -3,7 +3,7 @@
   <Item class="KeyframeSequence" referent="RBX0">
     <Properties>
       <string name="Name">Walk</string>
-      <bool name="Loop">false</bool>
+      <bool name="Loop">true</bool>
       <token name="Priority">2</token>
     </Properties>
     <Item class="Keyframe" referent="RBX1">

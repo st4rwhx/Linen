@@ -28,12 +28,20 @@ linen convert dossier_avec_les_rbxm/ -o examples/starter/R15_converties
 | `hit2` | 42 | non | `Handle` |
 | `in seat 1` | 1 | non | |
 
-**La conversion est exacte.** Vérifié cellule par cellule sur les **4097 poses** :
-écart maximum **5×10⁻⁷** sur une case de matrice, soit l'arrondi d'écriture à six
-décimales. Aucune approximation dans le chemin.
+**La conversion est exacte.** Vérifiée bout en bout : pour chaque image-clé, on
+place le membre comme Roblox le placerait sur un rig R6 avec le fichier
+d'origine, puis comme il le placerait sur un rig R15 avec le fichier converti,
+et on compare les deux orientations. **2873 comparaisons, écart maximum
+1,1×10⁻⁶** sur une case de matrice — l'arrondi d'écriture à six décimales.
 
 Chaque temps d'image-clé, chaque easing, et chaque partie qui n'est pas du corps
 — `Handle`, `Katana` — traversent **intacts**.
+
+> Une version antérieure de ce dossier était **vide de mouvement** : le lecteur
+> binaire butait sur la forme compressée que Roblox utilise pour une rotation
+> nulle, et l'appelant avalait l'erreur, donc toute la colonne `CFrame` du
+> fichier disparaissait. Les 17 fichiers s'importaient et ne bougeaient pas.
+> Corrigé, avec un test qui échoue si la colonne repart en silence.
 
 ## Ce qu'une conversion R6 → R15 ne peut pas faire
 
@@ -54,8 +62,8 @@ environ 2,4 studs le long d'un bras tendu. Il faudra rattraper cet écart dans l
 ## Les 40 autres, et pourquoi
 
 **20 sont des animations de viewmodel.** Leur arbre de poses est enraciné sur
-`AnimBase` — une part de ton arme — avec les bras accrochés au fusil plutôt qu'à
-un torse. Ce ne sont pas des animations de personnage. **Aucun rig R15 n'a cette
+une part de ton arme — avec les bras accrochés au fusil plutôt qu'à un torse. Ce
+ne sont pas des animations de personnage. **Aucun rig R15 n'a cette
 hiérarchie**, et renommer les parties produirait un fichier qui s'importe et ne
 fait rien. Elles sont refusées plutôt que cassées en silence.
 
@@ -64,9 +72,8 @@ fait rien. Elles sont refusées plutôt que cassées en silence.
 lecteur différent, pas un mapping différent. Faisable, mais c'est un autre
 chantier.
 
-**11 ne sortent pas du `.rar`.** L'archive utilise une méthode de compression
-RAR5 que ni `unar` ni `7z` ne décompressent ici — même erreur que sur le pack
-zombie. **Renvoie-les en `.zip`** et elles passeront.
+**11 font 0 octet.** Elles ne sont pas sorties du `.rar` — le nom est là, le
+contenu non. **Renvoie-les en `.zip`** et elles passeront.
 
 | | |
 | --- | --- |
@@ -79,7 +86,4 @@ zombie. **Renvoie-les en `.zip`** et elles passeront.
 
 ## Ce qui n'est pas vérifié
 
-Aucun de ces fichiers n'a été importé dans Roblox Studio. Ce qui est vérifié :
-le décodage binaire contre **5989 CFrames** — toutes orthonormales à 2,4×10⁻⁶
-près, donc de vraies matrices de rotation — l'exactitude de la conversion sur
-4097 poses, et la hiérarchie de sortie contre le rig R15 lui-même.
+Aucun de ces fichiers n'a été importé dans Roblox Studio.

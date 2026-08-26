@@ -23,7 +23,7 @@ local motion: Motion = {
 	Name = "Militaire_Fall",
 	FPS = 30,
 	Length = 27,
-	Looped = false,
+	Looped = true,
 
 	Tracks = {
 		["Head"] = {

@@ -87,6 +87,11 @@ def moon_payload(
     scale = rate / float(clip.fps)
     tolerance = np.deg2rad(angular_tolerance_deg)
 
+    # Moon stores a joint's Motor6D transform, the same value a Pose carries, so
+    # it needs the same trip into the frame the joint was built in — a no-op on
+    # R15, a quarter turn on R6.
+    joint_frames = {part.name: np.asarray(part.joint_frame, dtype=float) for part in clip.rig.parts}
+
     tracks: dict[str, list[list]] = {}
     for part, track in clip.rotations.items():
         frames = len(track)
@@ -99,8 +104,9 @@ def moon_payload(
 
         keys = []
         for frame in kept:
-            matrix = quat_to_mat(np.asarray(track[frame])[None])[0]
-            components = cframe_components((0.0, 0.0, 0.0), matrix)
+            local = quat_to_mat(np.asarray(track[frame])[None])[0]
+            axes = joint_frames.get(part, np.eye(3))
+            components = cframe_components((0.0, 0.0, 0.0), axes.T @ local @ axes)
             keys.append([round(frame * scale), [round(float(v), 6) for v in components]])
         tracks[part] = _dedupe(keys)
 
