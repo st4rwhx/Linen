@@ -35,15 +35,15 @@ class FbxError(ValueError):
 class Node:
     name: str
     properties: list = field(default_factory=list)
-    children: list["Node"] = field(default_factory=list)
+    children: list[Node] = field(default_factory=list)
 
-    def find(self, name: str) -> "Node | None":
+    def find(self, name: str) -> Node | None:
         for child in self.children:
             if child.name == name:
                 return child
         return None
 
-    def find_all(self, name: str) -> list["Node"]:
+    def find_all(self, name: str) -> list[Node]:
         return [child for child in self.children if child.name == name]
 
 

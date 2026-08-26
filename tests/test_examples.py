@@ -50,7 +50,15 @@ def _keyframes(path: Path) -> list[tuple[float, dict[str, np.ndarray]]]:
     return frames
 
 
-def _animations() -> list[Path]:
+# One folder holds animations that were never meant to be looked at here:
+# `R15_converties` is a game's own R6 animations converted to R15, on request,
+# with their original names and nothing else beside them. A conversion has no
+# page because there is nothing to preview that the game does not already have.
+# The pairing promise below is about what this project publishes as a demo.
+UNPAIRED = {"R15_converties"}
+
+
+def _keyframe_sequences() -> list[Path]:
     """Every shipped `.rbxmx` that holds an animation, not a set of parts."""
     found = []
     for path in sorted(EXAMPLES.rglob("*.rbxmx")):
@@ -58,6 +66,16 @@ def _animations() -> list[Path]:
         if first is not None and first.get("class") == "KeyframeSequence":
             found.append(path)
     return found
+
+
+def _animations() -> list[Path]:
+    """The animations this project ships to be looked at before importing."""
+    return [p for p in _keyframe_sequences() if p.parent.name not in UNPAIRED]
+
+
+def _converted() -> list[Path]:
+    """The animations converted for someone else's game, which ship alone."""
+    return [p for p in _keyframe_sequences() if p.parent.name in UNPAIRED]
 
 
 def _page_for(rbxmx: Path) -> tuple[Path, str | None]:
@@ -118,3 +136,68 @@ def test_the_file_moves_like_the_page_beside_it(rbxmx: Path) -> None:
         f"{rbxmx.name} is {worst:.2f} deg off {page_path.name} — one of the two "
         f"was regenerated without the other"
     )
+
+
+def _pose_parents(path: Path) -> dict[str, str | None]:
+    """Every posed joint in the file, and the joint it hangs from.
+
+    Roblox reads a `Keyframe` as a tree: a `Pose` rotates the joint between
+    itself and its parent. A pose in the wrong place turns the wrong joint.
+    """
+    root = ET.parse(path).getroot()
+    parents: dict[str, str | None] = {}
+
+    def walk(item: ET.Element, above: str | None) -> None:
+        for child in item.findall("Item"):
+            if child.get("class") != "Pose":
+                continue
+            name = child.find("Properties/string[@name='Name']").text
+            parents[name] = above
+            walk(child, name)
+
+    for keyframe in (i for i in root.iter("Item") if i.get("class") == "Keyframe"):
+        walk(keyframe, None)
+    return parents
+
+
+@pytest.mark.parametrize("rbxmx", _converted(), ids=lambda p: p.stem)
+def test_a_converted_animation_hangs_its_joints_where_an_r15_rig_does(rbxmx: Path) -> None:
+    """A conversion has no page, so this is what stands in for looking at it.
+
+    Studio does not complain about a joint that does not exist on the rig, nor
+    about one hung in the wrong place — it plays what it can and quietly drops
+    the rest. Either way the limb stops moving and nothing says why.
+    """
+    from linen.rigs import get_rig
+
+    rig = {part.name: part.parent for part in get_rig("R15").parts}
+    hands = {"LeftHand", "RightHand"}
+
+    frames = _keyframes(rbxmx)
+    assert frames, f"{rbxmx.name} carries no keyframe"
+
+    parents = _pose_parents(rbxmx)
+    for name, parent in parents.items():
+        if name in rig:
+            assert parent == rig[name], (
+                f"{rbxmx.name} hangs {name} from {parent!r}, an R15 rig hangs it "
+                f"from {rig[name]!r}"
+            )
+            continue
+        # Anything else is a held Tool: on Roblox the Handle is welded to the
+        # hand and the source animation moved it, so it is carried, not
+        # invented. A Tool can be several parts deep — a blade on a handle —
+        # so what matters is that the hand is somewhere above it.
+        held, seen = parent, {name}
+        while held is not None and held not in hands and held not in seen:
+            seen.add(held)
+            held = parents.get(held)
+        assert held in hands, (
+            f"{rbxmx.name} poses {name!r} under {parent!r} — no R15 joint has "
+            f"that name and no hand holds it"
+        )
+
+    assert set(parents) & set(rig), f"{rbxmx.name} poses nothing an R15 rig would move"
+
+    times = [time for time, _ in frames]
+    assert times == sorted(times), f"{rbxmx.name} has its keyframes out of order"

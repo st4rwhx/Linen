@@ -21,15 +21,15 @@ import matplotlib
 import numpy as np
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.patches import Polygon  # noqa: E402
+import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from linen.clip import AnimationClip  # noqa: E402
-from linen.generate import MotionPlan, synthesize  # noqa: E402
-from linen.math3d import quat_to_mat  # noqa: E402
-from linen.rigs import RigDefinition, get_rig  # noqa: E402
+from linen.clip import AnimationClip
+from linen.generate import MotionPlan, synthesize
+from linen.math3d import quat_to_mat
+from linen.rigs import RigDefinition, get_rig
 
 #: Unit cube corners and the four corners of each face, wound consistently so
 #: face normals point outwards.
