@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     _add_synth(sub)
     _add_scene(sub)
     _add_library(sub)
+    _add_convert(sub)
     sub.add_parser("providers", help="show which LLM providers are configured")
     _add_vocabulary(
         sub.add_parser("vocabulary", help="list the pose and cycle names a plan may use")
@@ -52,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
         "synth": _cmd_synth,
         "scene": _cmd_scene,
         "library": _cmd_library,
+        "convert": _cmd_convert,
         "providers": _cmd_providers,
         "vocabulary": _cmd_vocabulary,
     }[args.command]
@@ -175,6 +177,45 @@ def _load_vocabularies(names: list[str] | None) -> None:
             from .generate import military
 
             military.register()
+
+
+def _add_convert(sub) -> None:
+    parser = sub.add_parser(
+        "convert",
+        help="an existing R6 .rbxm animation -> R15",
+        description=(
+            "Move animations a game already has onto R15. Reads Roblox's binary "
+            ".rbxm and rewrites the pose tree against the R15 rig, keeping every "
+            "keyframe time, easing and non-body part exactly as it was."
+        ),
+    )
+    parser.add_argument("files", type=Path, nargs="+", help=".rbxm files, or a folder")
+    parser.add_argument(
+        "-o", "--out", type=Path, required=True, help="folder to write the .rbxmx into"
+    )
+
+
+def _cmd_convert(args) -> int:
+    from .convert import ConvertError, convert_file
+
+    sources: list[Path] = []
+    for entry in args.files:
+        sources += sorted(entry.rglob("*.rbxm")) if entry.is_dir() else [entry]
+
+    done, refused = 0, []
+    for source in sources:
+        try:
+            report = convert_file(source, args.out / f"{source.stem}.rbxmx")
+        except (ConvertError, ValueError) as exc:
+            refused.append((source.name, str(exc)))
+            continue
+        done += 1
+        print(f"  {report.line()}")
+
+    print(f"{done} converties vers {args.out}")
+    for name, why in refused:
+        print(f"  refuse {name}: {why}", file=sys.stderr)
+    return 0 if done else 1
 
 
 def _add_duration(parser: argparse.ArgumentParser) -> None:
