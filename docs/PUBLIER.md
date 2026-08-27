@@ -4,42 +4,137 @@ Tout le reste du projet s'arrête à un fichier. Un jeu qui tourne ne joue pas u
 fichier, il joue un `rbxassetid://`. Obtenir ce numéro voulait dire ouvrir
 l'éditeur d'animation et cliquer **Publish**, une fois par animation, à la main.
 
-C'est fini :
+C'est fini. Voilà exactement quoi taper, de zéro, sous Windows.
 
-```bash
-export ROBLOX_API_KEY="..."          # une seule fois, dans ton shell
-linen publish examples/starter/R15_converties --creator group:TON_GROUPE \
-      --manifest publish.json
+---
+
+## 1. Python
+
+Il en faut **3.11 ou plus**. Dans `cmd` :
+
+```
+py --version
+```
+
+Si ça répond `Python 3.11.x` ou mieux, passe à l'étape 2. Sinon, installe-le
+depuis [python.org/downloads](https://www.python.org/downloads/) et **coche
+« Add python.exe to PATH »** sur le premier écran de l'installeur. C'est la case
+que tout le monde rate, et sans elle rien de ce qui suit ne marche.
+
+## 2. Récupérer le projet
+
+> **Attention** : la branche par défaut du dépôt (`main`) est **vide**. Tout le
+> code est sur `claude/freemocap-roblox-animations-b5nhwl`. Si tu cliques
+> « Download ZIP » depuis la page d'accueil de GitHub, tu télécharges un dossier
+> sans rien dedans.
+
+**Avec Git**, si tu l'as :
+
+```
+cd %USERPROFILE%\Desktop
+git clone -b claude/freemocap-roblox-animations-b5nhwl https://github.com/st4rwhx/Linen
+cd Linen
+```
+
+**Sans Git** : télécharge
+[le ZIP de la branche](https://github.com/st4rwhx/Linen/archive/refs/heads/claude/freemocap-roblox-animations-b5nhwl.zip),
+clic droit → **Extraire tout**, puis dans `cmd` va dans le dossier extrait :
+
+```
+cd %USERPROFILE%\Desktop\Linen-claude-freemocap-roblox-animations-b5nhwl
+```
+
+Pour vérifier que tu es au bon endroit, `dir` doit montrer `pyproject.toml` et
+un dossier `linen`.
+
+## 3. Installer
+
+```
+py -m pip install .
+```
+
+Puis vérifie :
+
+```
+linen --version
+```
+
+Si ça affiche `linen 0.1.0`, c'est bon, et la commande marche **depuis
+n'importe quel dossier**. Si Windows répond que `linen` n'est pas reconnu,
+utilise `py -m linen.cli` à la place de `linen` partout dans la suite — c'est
+strictement équivalent.
+
+## 4. Créer la clé Roblox
+
+1. [create.roblox.com/dashboard/credentials](https://create.roblox.com/dashboard/credentials)
+   → **API Keys** → **Create API Key**.
+2. Donne-lui un nom (`linen`, par exemple).
+3. **Access Permissions** → **Add API System** → choisis **`assets`**, puis coche
+   **Read** *et* **Write**.
+4. Si tu publies sous un groupe, choisis le groupe dans le sélecteur de
+   propriétaire. La clé doit appartenir à quelqu'un qui a ce droit dans le
+   groupe — c'est l'API qui le vérifie, pas Linen.
+5. **Security** → laisse la liste d'IP vide, ou mets la tienne. Si tu la
+   remplis et que ton IP change, tu récupères un **403** : c'est ça, pas la
+   permission.
+6. **Save & Generate Key**, puis copie la clé **tout de suite** — elle ne se
+   réaffiche jamais.
+
+> **La clé ne se passe jamais en argument.** `linen publish --api-key ...`
+> n'existe pas et n'existera pas : un argument est lisible par n'importe quel
+> processus de la machine et reste écrit dans l'historique du terminal. Une clé
+> qui passe par là doit être révoquée, et personne ne s'en aperçoit.
+
+## 5. Donner la clé au terminal
+
+**Dans la même fenêtre `cmd`** que celle où tu vas publier :
+
+```
+set ROBLOX_API_KEY=colle-ta-cle-ici
+```
+
+Trois pièges, tous les trois classiques sous Windows :
+
+- **Pas de guillemets.** `set ROBLOX_API_KEY="abc"` met *littéralement*
+  `"abc"`, guillemets compris, et Roblox répondra 401.
+- **Pas d'espace autour du `=`.**
+- **Ça ne dure que dans cette fenêtre.** Si tu fermes `cmd`, refais le `set`.
+  Pour que ça tienne, `setx ROBLOX_API_KEY colle-ta-cle-ici` une fois — mais
+  `setx` ne s'applique qu'aux fenêtres **ouvertes après**, donc ouvre-en une
+  nouvelle ensuite.
+
+Vérifie que la variable est bien là :
+
+```
+echo %ROBLOX_API_KEY%
+```
+
+Elle doit réafficher ta clé, sans guillemets autour.
+
+> **PowerShell** au lieu de `cmd` : `$env:ROBLOX_API_KEY = "ta-cle"` — là les
+> guillemets sont normaux.
+>
+> **macOS / Linux** : `export ROBLOX_API_KEY="ta-cle"`.
+
+## 6. Publier
+
+```
+linen publish examples\starter\R15_converties\Run.rbxmx --creator user:TON_ID
 ```
 
 ```
   Run.rbxmx: rbxassetid://2205400862 (cree, revision 1)
-  Swim.rbxmx: rbxassetid://2205400863 (cree, revision 1)
 ```
 
----
+**Ton `TON_ID`** est le nombre dans l'URL de ton profil :
+`roblox.com/users/`**`12345678`**`/profile`. Pour un groupe, le nombre dans
+`roblox.com/groups/`**`12345678`**`/nom` et tu écris `--creator group:12345678`.
 
-## La clé, en trois minutes
+Avant de tout envoyer, tu peux toujours répéter sans rien envoyer :
 
-1. [create.roblox.com/dashboard/credentials](https://create.roblox.com/dashboard/credentials)
-   → **API Keys** → **Create API Key**.
-2. **Access Permissions** → ajoute **`assets`**, avec **Read** *et* **Write**.
-3. Si tu publies sous un groupe, choisis le groupe dans le sélecteur de
-   propriétaire. La clé doit appartenir à quelqu'un qui a ce droit dans le
-   groupe — l'API le vérifie, pas Linen.
-4. **Security** → laisse la liste d'IP vide, ou mets la tienne. Si tu la
-   remplis et que ton IP change, tu récupères un **403** : c'est ça, pas la
-   permission.
-5. Copie la clé **maintenant** ; elle ne se réaffiche pas.
-
-```bash
-export ROBLOX_API_KEY="ta-cle"       # à mettre dans ~/.zshrc ou ~/.bashrc
 ```
-
-> **La clé ne se passe jamais en argument.** `linen publish --api-key ...`
-> n'existe pas et n'existera pas. Un argument est lisible par n'importe quel
-> processus de la machine (`ps`), et il reste écrit dans l'historique du shell.
-> Une clé qui passe par là doit être révoquée, et personne ne s'en rend compte.
+linen publish examples\starter\R15_converties --creator user:TON_ID --dry-run
+```
 
 ---
 
@@ -59,11 +154,18 @@ Commite `publish.json`. Ce n'est pas un secret, c'est la carte de ton jeu.
 
 ## Ce que ça donne
 
-```bash
-linen publish dossier/ --creator user:TON_ID --dry-run   # rien n'est envoyé
-linen publish Run.rbxmx --creator group:123456           # une seule
-linen publish examples/demo/Cinematique_Disarm --creator group:123456 \
-      --manifest cinematique.json                        # toute une scène
+```
+rem une seule animation
+linen publish examples\starter\R15_converties\Run.rbxmx --creator user:TON_ID
+
+rem tout un dossier, sous ton groupe, en gardant la carte des identifiants
+linen publish examples\starter\R15_converties --creator group:123456 --manifest publish.json
+
+rem une cinematique entiere
+linen publish examples\demo\Cinematique_Disarm --creator group:123456 --manifest cinematique.json
+
+rem verifier sans rien envoyer
+linen publish examples\starter\R15_converties --creator user:TON_ID --dry-run
 ```
 
 | Option | À quoi ça sert |
@@ -104,8 +206,8 @@ Roblox accepte un `.rbxmx` de Linen.
 
 Ça se tranche avec un fichier et dix minutes :
 
-```bash
-linen publish examples/starter/R15_converties/Run.rbxmx --creator user:TON_ID
+```
+linen publish examples\starter\R15_converties\Run.rbxmx --creator user:TON_ID
 ```
 
 Puis dans Studio, un `Animation` avec l'id rendu, joué sur un rig R15. Si ça

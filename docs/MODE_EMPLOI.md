@@ -13,7 +13,7 @@ Il faut **Python 3.11 ou plus**. C'est tout : la seule dépendance est NumPy.
 python --version          # doit afficher 3.11 ou plus
 
 # Récupérer Linen
-git clone https://github.com/st4rwhx/Linen
+git clone -b claude/freemocap-roblox-animations-b5nhwl https://github.com/st4rwhx/Linen
 cd Linen
 
 # Installer
@@ -296,7 +296,7 @@ secondes et ça répond à la seule question qui compte : *est-ce que ça ressem
 
 ```bash
 # 1. Installer
-git clone https://github.com/st4rwhx/Linen && cd Linen
+git clone -b claude/freemocap-roblox-animations-b5nhwl https://github.com/st4rwhx/Linen && cd Linen
 python -m pip install .
 
 # 2. Regarder ce qui existe déjà — rien à installer de plus
