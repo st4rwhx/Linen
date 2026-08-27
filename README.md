@@ -27,6 +27,11 @@ prompt texte, sans coût d'API.
 > des pieds en studs et le ramène à 0,05 — sur de la vraie mocap studio. Un
 > animateur juge à l'œil ; un nombre ne s'arrête pas.
 >
+> **Tu veux l'identifiant, pas le fichier ?**
+> **[`docs/PUBLIER.md`](docs/PUBLIER.md)** : `linen publish` téléverse par Open
+> Cloud et rend de vrais `rbxassetid://`, sous ton compte ou sous ton groupe,
+> sans ouvrir Studio et sans jamais toucher à un cookie.
+>
 > **Tu veux finir l'animation à la main ?**
 > **[`docs/MOON.md`](docs/MOON.md)** : `--moon` écrit une sauvegarde Moon
 > Animator 2 à côté du `.rbxmx`, et la vraie réponse à « est-ce qu'on peut

@@ -38,6 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     _add_scene(sub)
     _add_library(sub)
     _add_convert(sub)
+    _add_publish(sub)
     sub.add_parser("providers", help="show which LLM providers are configured")
     _add_vocabulary(
         sub.add_parser("vocabulary", help="list the pose and cycle names a plan may use")
@@ -54,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         "scene": _cmd_scene,
         "library": _cmd_library,
         "convert": _cmd_convert,
+        "publish": _cmd_publish,
         "providers": _cmd_providers,
         "vocabulary": _cmd_vocabulary,
     }[args.command]
@@ -216,6 +218,110 @@ def _cmd_convert(args) -> int:
     for name, why in refused:
         print(f"  refuse {name}: {why}", file=sys.stderr)
     return 0 if done else 1
+
+
+def _add_publish(sub) -> None:
+    parser = sub.add_parser(
+        "publish",
+        help="a .rbxmx animation -> a real rbxassetid:// on Roblox",
+        description=(
+            "Upload animations through Open Cloud and get the asset ids a running "
+            "game needs, without opening Studio. The API key is read from "
+            "$ROBLOX_API_KEY and is never accepted as an argument: arguments are "
+            "readable by every process on the machine and are kept in shell "
+            "history. Create a key at create.roblox.com/dashboard/credentials "
+            "with the 'assets' permission, Read and Write."
+        ),
+    )
+    parser.add_argument("files", type=Path, nargs="+", help=".rbxmx files, or a folder")
+    parser.add_argument(
+        "--creator",
+        required=True,
+        help="who owns the asset: 'user:ID' or 'group:ID'. A group needs the "
+        "key's owner to hold that permission in the group.",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="JSON of filename -> asset id. Read before uploading, so a second "
+        "run updates the same assets instead of making duplicates the game "
+        "does not point at, and written after.",
+    )
+    parser.add_argument("--description", default="", help="asset description, on creation")
+    parser.add_argument(
+        "--asset-type",
+        default="Animation",
+        help="Roblox asset type. Animation is right for a KeyframeSequence; "
+        "Model is right for a rig or a blockout. Default: Animation",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="say what would be uploaded, and check the key is readable, "
+        "without sending anything",
+    )
+
+
+def _cmd_publish(args) -> int:
+    from .cloud import (
+        Creator,
+        PublishError,
+        api_key,
+        load_manifest,
+        publish,
+        save_manifest,
+    )
+
+    creator = Creator.parse(args.creator)
+
+    sources: list[Path] = []
+    for entry in args.files:
+        sources += sorted(entry.rglob("*.rbxmx")) if entry.is_dir() else [entry]
+    if not sources:
+        print("error: no .rbxmx to publish", file=sys.stderr)
+        return 1
+
+    known = load_manifest(args.manifest) if args.manifest else {}
+
+    if args.dry_run:
+        try:
+            api_key()
+        except PublishError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(f"cle lue depuis l'environnement, proprietaire {creator}")
+        for source in sources:
+            existing = known.get(source.name)
+            what = f"mise a jour de {existing}" if existing else "creation"
+            print(f"  {source.name}: {what}")
+        print(f"{len(sources)} fichiers, rien n'a ete envoye (--dry-run)")
+        return 0
+
+    done: dict[str, str] = dict(known)
+    failed: list[tuple[str, str]] = []
+    for source in sources:
+        try:
+            result = publish(
+                source,
+                creator,
+                description=args.description,
+                asset_id=known.get(source.name),
+                asset_type=args.asset_type,
+            )
+        except PublishError as exc:
+            failed.append((source.name, str(exc)))
+            continue
+        done[source.name] = result.asset_id
+        print(f"  {result.line()}")
+
+    if args.manifest and done != known:
+        save_manifest(args.manifest, done, creator)
+        print(f"manifeste ecrit dans {args.manifest}")
+
+    print(f"{len(done) - len(known)} publiees, {len(sources) - len(failed)} traitees")
+    for name, why in failed:
+        print(f"  echec {name}: {why}", file=sys.stderr)
+    return 1 if failed else 0
 
 
 def _add_duration(parser: argparse.ArgumentParser) -> None:
