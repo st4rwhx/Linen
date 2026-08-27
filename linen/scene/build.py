@@ -313,9 +313,28 @@ def _capture_clip(entry: ScheduledCue, rig, fps: float) -> AnimationClip:
     `linen prompt --library` makes: a fifteen-second take rarely wants its
     first two seconds, it wants the two seconds that answer the beat.
     """
+    from pathlib import Path
+
     from ..library import best_window
     from ..retarget import SolveOptions, solve_clip
-    from ..sources import load_motion
+    from ..sources import ROBLOX_SUFFIXES, load_motion
+
+    if Path(entry.capture).suffix.lower() in ROBLOX_SUFFIXES:
+        # A finished Roblox animation — from a service, from Studio, keyed by
+        # hand. It is already on a rig, so it is used as it is; there is no
+        # capture behind it for `best_window` to read, and trimming it would
+        # cut somebody's finished work in half.
+        from ..sources.keyframes import read_keyframe_sequence
+
+        clip = read_keyframe_sequence(entry.capture, fps=fps)
+        if clip.rig.name != rig.name:
+            raise SceneError(
+                f"{Path(entry.capture).name} is a {clip.rig.name} animation and "
+                f"{entry.cue.actor} is on {rig.name}. Convert it first: "
+                f"`linen convert` moves an R6 animation onto R15."
+            )
+        clip.name = entry.plan.name
+        return clip
 
     track = load_motion(entry.capture, skeleton="mixamo", units="cm")
     clip = solve_clip(rig, track, SolveOptions(root_motion=False, smoothing_frames=3))

@@ -27,6 +27,11 @@ prompt texte, sans coût d'API.
 > des pieds en studs et le ramène à 0,05 — sur de la vraie mocap studio. Un
 > animateur juge à l'œil ; un nombre ne s'arrête pas.
 >
+> **Comment font ceux qui sortent des animations de fou ?**
+> **[`docs/COMMENT_ILS_FONT.md`](docs/COMMENT_ILS_FONT.md)** : NoCapMocap, la
+> mocap depuis vidéo et son mur de licence, ce que font vraiment les animateurs
+> Roblox — et pourquoi le métier de Linen est d'assembler, pas d'inventer.
+>
 > **Tes animations ont l'air dessinées ?**
 > **[`docs/BIBLIOTHEQUE.md`](docs/BIBLIOTHEQUE.md)** : le vocabulaire de poses
 > connaît douze verbes. CMU en a 2548, capturés en studio, gratuits y compris

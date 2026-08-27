@@ -223,10 +223,21 @@ def _index_one(
     rig: str,
 ) -> Entry:
     from .retarget import SolveOptions, solve_clip
-    from .sources import load_motion
+    from .sources import ROBLOX_SUFFIXES, load_motion
 
-    track = load_motion(path, skeleton=skeleton, units=units)
-    clip = solve_clip(get_rig(rig), track, SolveOptions())
+    track = None
+    if path.suffix.lower() in ROBLOX_SUFFIXES:
+        # Already a Roblox animation: nothing to retarget, and no capture to
+        # measure against. Everything the search ranks on comes from forward
+        # kinematics on the clip itself, so the index is as good either way —
+        # only the world-space measures, which need the original capture, are
+        # missing.
+        from .sources.keyframes import read_keyframe_sequence
+
+        clip = read_keyframe_sequence(path)
+    else:
+        track = load_motion(path, skeleton=skeleton, units=units)
+        clip = solve_clip(get_rig(rig), track, SolveOptions())
 
     description = descriptions.get(path.stem, "") or _readable(path.stem)
     entry = Entry(
@@ -238,7 +249,8 @@ def _index_one(
         frames=clip.frame_count,
     )
     _measure(entry, clip)
-    _measure_world(entry, track)
+    if track is not None:
+        _measure_world(entry, track)
     entry.terms = _terms(entry)
     return entry
 
