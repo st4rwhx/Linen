@@ -264,3 +264,17 @@ def test_a_rig_is_read_at_its_root_not_at_the_model_pivot():
     root = SURVEY.index('model:FindFirstChild("HumanoidRootPart")')
     pivot = SURVEY.index("model:GetPivot()")
     assert root < pivot, "the root is the first choice; the pivot is the fallback"
+
+
+def test_a_plugins_scratch_object_is_not_offered_as_a_camera_target():
+    """Moon Animator leaves a `MegMoAnimatorGizmoProxy` at the origin.
+
+    Read off a real survey: after the ground and the tools were filtered, that
+    was the only thing left — a plugin's leftovers standing in for the set.
+    """
+    from linen.scene.place import SURVEY
+
+    assert "isPluginJunk" in SURVEY
+    for needle in ("Gizmo", "Proxy", "MoonAnimator", "MegMo"):
+        assert f'"{needle}"' in SURVEY
+    assert "Transparency < 1" in SURVEY, "nor anything nobody can see"

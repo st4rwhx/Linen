@@ -85,6 +85,21 @@ local anonymous = {{ Part = true, Wedge = true, MeshPart = true, Union = true, M
 local scenery = {{ Terrain = true, Baseplate = true, SpawnLocation = true }}
 local MAX_LANDMARK_STUDS = 200
 
+--[[ Plugins leave scratch objects in the Workspace — Moon Animator drops a
+     `MegMoAnimatorGizmoProxy` at the origin. They are not scenery and they are
+     not yours. Neither is anything invisible: a camera is not pointed at a
+     part nobody can see. ]]
+local junk = {{ "Gizmo", "Proxy", "MoonAnimator", "MegMo" }}
+
+local function isPluginJunk(name: string): boolean
+	for _, needle in junk do
+		if string.find(name, needle, 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
 local function insideRig(thing: Instance): boolean
 	--[[ A tool's Handle sits inside the character, not beside it. It belongs to
 	     whoever is holding it, so it is not set dressing. ]]
@@ -128,9 +143,10 @@ for _, thing in Workspace:GetDescendants() do
 			parent = thing.Parent and thing.Parent.Name or "",
 		}})
 	elseif #landmarks < MAX_LANDMARKS and not anonymous[thing.Name]
-		and not scenery[thing.Name] and not thing:IsA("Terrain") and not insideRig(thing) then
+		and not scenery[thing.Name] and not thing:IsA("Terrain")
+		and not isPluginJunk(thing.Name) and not insideRig(thing) then
 		local position, size = nil, nil
-		if thing:IsA("BasePart") then
+		if thing:IsA("BasePart") and thing.Transparency < 1 then
 			position, size = thing.Position, thing.Size
 		elseif thing:IsA("Model") and thing.PrimaryPart and not thing:FindFirstChildOfClass("Humanoid") then
 			local box, extent = thing:GetBoundingBox()
