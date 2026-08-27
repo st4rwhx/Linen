@@ -144,6 +144,39 @@ un jeu commercial, et ça ne réglerait ni le contact ni la présentation.
 
 ---
 
+## 6. Le choix, avec les chiffres
+
+Relevé en août 2026, prix et licences vérifiés à la source.
+
+| | Prix | Licence commerciale | Sortie | Ce que ça règle |
+| --- | --- | --- | --- | --- |
+| **CMU** | **gratuit** | oui, explicitement, y compris commercial | `.bvh` | 2548 mouvements réels. Le socle. |
+| **NoCapMocap** | **9 $/mois** (50 crédits ≈ 50 s), 29 $ (250), 79 $ (1000). Packs à partir de 7 $ / 25 crédits | **oui — « you may use generated animation files in personal and commercial projects »**, et tu restes propriétaire | R15 natif + FBX | Texte → mouvement, et vidéo → mouvement (beta, 20 s max, une personne) |
+| **Mixamo** | gratuit | oui, illimité ; interdiction de redistribuer les fichiers bruts | `.dae` | Combat, armes, morts stylisées |
+| **Cascadeur** | **12 $/mois** indie (< 100 k$ de revenus/an) ; version gratuite non commerciale | oui sur les plans payants | **`.dae`**, FBX | **Le contact.** AutoPosing, AutoPhysics, ragdoll, inbetweening IA |
+| **WHAM / TRAM / GVHMR** | gratuit | **NON** — SMPL interdit tout usage commercial | — | rien qu'on ait le droit d'utiliser |
+
+**Le détail qui compte** : NoCapMocap facture **1 crédit par seconde générée** et rend
+**quatre variantes** pour ce crédit. La scène `Contre` fait 7,45 s à deux acteurs,
+soit ~15 s de mouvement — **le plan à 9 $ la couvre trois fois**, ratés compris.
+
+Et Cascadeur exporte du **`.dae`**, que le lecteur Collada d'ici lit déjà. Une
+pose corrigée à la main dans Cascadeur entre dans une bibliothèque Linen sans
+conversion. *(Non testé de bout en bout : le format est standard, mais personne
+ici n'a fait tourner Cascadeur.)*
+
+### La recommandation
+
+1. **CMU ce soir.** Gratuit, définitif, sans risque. C'est le plancher.
+2. **NoCapMocap Starter, un mois, 9 $.** C'est le seul moyen de savoir si leur
+   qualité vaut le coup, et ça coûte moins qu'une pizza. Tu restes propriétaire
+   et l'usage commercial est écrit noir sur blanc.
+3. **Cascadeur seulement si le contact te gêne encore.** C'est le seul outil de
+   toute cette page qui attaque ce problème — et le contact, c'est justement
+   toute ta scène de bagarre.
+
+**Coût pour savoir : 9 $.** Pas un chantier de six mois.
+
 ## Ce qui reste un vrai chantier de code, si un jour on le veut
 
 **Un solveur IK avec conscience des collisions.** C'est la seule chose de cette
