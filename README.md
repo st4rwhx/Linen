@@ -27,6 +27,11 @@ prompt texte, sans coût d'API.
 > des pieds en studs et le ramène à 0,05 — sur de la vraie mocap studio. Un
 > animateur juge à l'œil ; un nombre ne s'arrête pas.
 >
+> **Tes animations ont l'air dessinées ?**
+> **[`docs/BIBLIOTHEQUE.md`](docs/BIBLIOTHEQUE.md)** : le vocabulaire de poses
+> connaît douze verbes. CMU en a 2548, capturés en studio, gratuits y compris
+> commercialement — vérifié de bout en bout, avec les commandes.
+>
 > **Tu veux une cinématique dans ton jeu à toi ?**
 > **[`docs/CINEMATIQUE_DANS_TON_JEU.md`](docs/CINEMATIQUE_DANS_TON_JEU.md)** :
 > relever ta place, écrire la scène, la générer calée sur tes vrais rigs, et la
