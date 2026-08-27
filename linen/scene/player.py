@@ -405,15 +405,29 @@ for _, entry in STAGE do
 \tend
 
 \tlocal sequenceName = string.format("%s_%s", SCENE_NAME, entry.name)
-\tlocal sequence = folder and folder:FindFirstChild(sequenceName)
-\tif sequence == nil or not sequence:IsA("KeyframeSequence") then
-\t\ttable.insert(missing, `KeyframeSequence "{sequenceName}"`)
-\t\tcontinue
-\tend
 
+\t-- A published id works everywhere, a live server included. Registering a
+\t-- KeyframeSequence works only inside Studio, so it is the fallback rather
+\t-- than the plan: a scene that plays in Studio and stands still in the game
+\t-- is the failure this ordering exists to avoid.
+\tlocal assetId = ANIMATION_IDS[entry.name]
 \tlocal animation = Instance.new("Animation")
 \tanimation.Name = sequenceName
-\tanimation.AnimationId = KeyframeSequenceProvider:RegisterKeyframeSequence(sequence)
+
+\tif assetId ~= nil and assetId ~= "" then
+\t\tanimation.AnimationId = assetId
+\telse
+\t\tlocal sequence = folder and folder:FindFirstChild(sequenceName)
+\t\tif sequence == nil or not sequence:IsA("KeyframeSequence") then
+\t\t\ttable.insert(missing, `KeyframeSequence "{sequenceName}", ou son id publie`)
+\t\t\tcontinue
+\t\tend
+\t\tif not RunService:IsStudio() then
+\t\t\ttable.insert(missing, `un id publie pour "{entry.name}" — hors Studio une KeyframeSequence ne se joue pas`)
+\t\t\tcontinue
+\t\tend
+\t\tanimation.AnimationId = KeyframeSequenceProvider:RegisterKeyframeSequence(sequence)
+\tend
 
 \tlocal track = animator:LoadAnimation(animation)
 \ttrack.Priority = Enum.AnimationPriority.Action4

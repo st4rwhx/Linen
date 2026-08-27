@@ -352,3 +352,19 @@ def test_the_wait_roblox_asks_for_is_honoured_but_capped():
     assert _retry_after(error("2"), 9.0) == 2.0
     assert _retry_after(error("3600"), 9.0) == 60.0
     assert _retry_after(error("soon"), 9.0) == 9.0
+
+
+def test_a_path_that_does_not_exist_blames_the_working_directory(tmp_path, monkeypatch, capsys):
+    """The guide's paths are relative to the project; a terminal opens at home.
+
+    "no such file" alone sends someone looking for a missing file that is
+    exactly where it should be, in a folder they are not standing in.
+    """
+    from linen.cli import main
+
+    monkeypatch.setenv("ROBLOX_API_KEY", KEY)
+    monkeypatch.chdir(tmp_path)
+    assert main(["publish", "examples/starter/R15_converties", "--creator", "user:1"]) == 1
+    errors = capsys.readouterr().err
+    assert str(tmp_path) in errors, "it has to say where you actually are"
+    assert "cd " in errors

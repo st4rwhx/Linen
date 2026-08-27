@@ -36,6 +36,7 @@ def scene_script(
     folder: str = "ServerStorage.LinenAnimations",
     sheet: SpottingSheet | None = None,
     mapping: dict[str, str] | None = None,
+    animations: dict[str, str] | None = None,
 ) -> str:
     scene = built.scene
     lines: list[str] = [HEADER.format(name=scene.name, folder=folder), ""]
@@ -55,6 +56,22 @@ def scene_script(
             f'\t{{ name = "{_escape(actor.name)}", rig = "{actor.rig.upper()}", '
             f"position = Vector3.new({x:g}, {y:g}, {z:g}), facing = {facing} }},"
         )
+    lines.append("}")
+    lines.append("")
+    # Published ids, per actor. Empty means "register the KeyframeSequence",
+    # which only Studio can do — so an empty table is a Studio-only scene, and
+    # the script says so rather than going quietly still on a live server.
+    lines.append(
+        "-- Published animation ids, per actor. Empty: the script falls back to"
+    )
+    lines.append(
+        "-- registering the KeyframeSequences, which works in Studio only."
+    )
+    lines.append("local ANIMATION_IDS: { [string]: string } = {")
+    for actor in scene.actors:
+        asset = (animations or {}).get(actor.name, "")
+        if asset:
+            lines.append(f'\t["{_escape(actor.name)}"] = "{_escape(asset)}",')
     lines.append("}")
     lines.append("")
     lines.append("-- Cue sheet, for reference when retiming by hand.")
@@ -222,10 +239,15 @@ def write_scene_script(
     folder: str = "ServerStorage.LinenAnimations",
     sheet: SpottingSheet | None = None,
     mapping: dict[str, str] | None = None,
+    animations: dict[str, str] | None = None,
 ) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(scene_script(built, folder=folder, sheet=sheet, mapping=mapping))
+    path.write_text(
+        scene_script(
+            built, folder=folder, sheet=sheet, mapping=mapping, animations=animations
+        )
+    )
     return path
 
 
