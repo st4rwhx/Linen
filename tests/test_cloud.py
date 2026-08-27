@@ -7,9 +7,10 @@ two-field form, the header the key rides in, the operation poll, and the
 handling when the answer is a refusal rather than an asset.
 
 The one thing that cannot be checked against a stand-in is whether Roblox
-accepts a `.rbxmx` this project generated. Roblox warns that files not written
-by Studio may not process, so that stays an open question until one is uploaded
-for real.
+accepts a `.rbxmx` this project generated rather than Studio — Roblox warns
+that it might not. That was settled by uploading one: asset 121632245238820,
+which plays on a rig in Studio. It is not something a stand-in can hold, so it
+is recorded here rather than asserted.
 """
 from __future__ import annotations
 
@@ -77,6 +78,9 @@ class _Api(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         self._record()
+        if type(self).behaviour == "rate-limited-once":
+            type(self).behaviour = "operation"
+            return self._answer(429, {"message": "Too many requests"})
         if type(self).behaviour == "forbidden":
             return self._answer(403, {"message": "Insufficient permissions"})
         if type(self).behaviour == "immediate":
@@ -295,3 +299,56 @@ def test_a_failed_file_does_not_take_the_others_down_with_it(api, tmp_path, monk
     errors = capsys.readouterr().err
     assert "echec A.rbxmx" in errors and "echec B.rbxmx" in errors
     assert KEY not in errors
+
+
+def test_a_rate_limit_waits_and_tries_again_instead_of_abandoning_the_batch(api, animation):
+    """Seventeen files in a row is a burst, and a burst is what 429 is for.
+
+    Failing on the eleventh would leave the job half done and — worse — the
+    manifest half written, so the next run would create duplicates of whatever
+    did not make it.
+    """
+    base, recorder = api
+    recorder.behaviour = "rate-limited-once"
+    result = publish(
+        animation,
+        Creator.parse("user:42"),
+        key=KEY,
+        base_url=base,
+        poll_seconds=0,
+        retry_seconds=0,
+    )
+    assert result.asset_id == "2205400862"
+    assert [c["method"] for c in recorder.seen][:2] == ["POST", "POST"], (
+        "the upload should have been retried, not given up on"
+    )
+
+
+def test_a_refusal_that_is_not_a_rate_limit_is_not_retried(api, animation):
+    """A 403 will be a 403 every time. Retrying it only delays the message."""
+    base, recorder = api
+    recorder.behaviour = "forbidden"
+    with pytest.raises(PublishError):
+        publish(
+            animation,
+            Creator.parse("user:42"),
+            key=KEY,
+            base_url=base,
+            poll_seconds=0,
+            retry_seconds=0,
+        )
+    assert len(recorder.seen) == 1
+
+
+def test_the_wait_roblox_asks_for_is_honoured_but_capped():
+    """A header saying 'come back in an hour' must read as a failure, not a hang."""
+    import urllib.error
+
+    from linen.cloud import _retry_after
+
+    def error(value):
+        return urllib.error.HTTPError("u", 429, "Too Many", {"Retry-After": value}, None)
+
+    assert _retry_after(error("2"), 9.0) == 2.0
+    assert _retry_after(error("3600"), 9.0) == 60.0
+    assert _retry_after(error("soon"), 9.0) == 9.0

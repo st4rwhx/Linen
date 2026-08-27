@@ -192,29 +192,28 @@ affichée.
 
 ---
 
-## Le point qui reste ouvert
+## Est-ce que Roblox accepte un fichier écrit par Linen ? Oui
 
-Roblox prévient qu'un `.rbxm`/`.rbxmx` **écrit ailleurs que par Studio** peut ne
-pas se téléverser ou ne pas fonctionner correctement, parce que Studio fait un
-traitement supplémentaire à l'enregistrement. Nos fichiers sont générés.
+C'était la seule question que les tests ne pouvaient pas trancher. Roblox
+prévient qu'un `.rbxm`/`.rbxmx` **écrit ailleurs que par Studio** peut ne pas
+se téléverser ou ne pas fonctionner, parce que Studio fait un traitement
+supplémentaire à l'enregistrement — et nos fichiers sont générés de bout en
+bout, jamais passés par Studio.
 
-Les tests couvrent tout ce qui est vérifiable sans compte : la forme du
-formulaire à deux champs, l'en-tête qui porte la clé, l'attente de l'opération,
-la mise à jour au lieu du doublon, et le fait qu'une erreur ne recrache jamais
-la clé. Ils **ne peuvent pas** couvrir la seule question qui reste : est-ce que
-Roblox accepte un `.rbxmx` de Linen.
+**Réglé le 27 août 2026.** Un `.rbxmx` produit par Linen, téléversé par
+`linen publish`, est devenu l'asset **`121632245238820`** : il apparaît dans
+l'inventaire d'animations de Studio et il **joue correctement** sur un rig.
 
-Ça se tranche avec un fichier et dix minutes :
+Donc le chemin est complet, et il n'a plus de clic dedans :
 
 ```
-linen publish examples\starter\R15_converties\Run.rbxmx --creator user:TON_ID
+prompt / .dae / .rbxm R6   →   linen   →   .rbxmx   →   rbxassetid://
 ```
 
-Puis dans Studio, un `Animation` avec l'id rendu, joué sur un rig R15. Si ça
-bouge, le chemin **prompt → animation → asset publié** est complet et il n'y a
-plus jamais de clic. Si ça refuse en 400, le repli est d'importer le fichier
-dans Studio et de le réenregistrer une fois — et on saura que c'est le
-traitement de Studio qui manque, pas notre écriture.
+Ce qui reste vrai malgré tout : un fichier peut être refusé pour ce qu'il
+contient, pas pour d'où il vient. Un **400** reste possible sur un fichier
+particulier, et le repli est alors de l'importer dans Studio et de le
+réenregistrer une fois.
 
 ---
 

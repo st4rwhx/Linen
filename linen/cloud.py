@@ -10,6 +10,10 @@ animation, by hand. That is the step this closes.
 The creator can be a user or a group, which is the case that used to force
 people onto the old cookie-based endpoints: it does not any more.
 
+Roblox warns that a file Studio did not write may not process. It does: a
+generated ``.rbxmx`` went up through this and became asset 121632245238820,
+which plays on a rig. That is the one thing here no test can hold.
+
 **The key never travels through an argument.** It is read from the environment
 and from nowhere else, it is never printed, and it is stripped out of error
 text before anything is raised. A key that reaches ``argv`` is visible to every
@@ -49,6 +53,13 @@ RBXM_MIME = "model/x-rbxm"
 #: it, so it is normal for this to take a few seconds.
 POLL_SECONDS = 1.5
 POLL_ATTEMPTS = 40
+
+#: Publishing a folder is a burst, and a burst is what the rate limiter is for.
+#: Giving up on the eleventh file of seventeen would leave the job half done and
+#: the manifest half written, so a 429 waits and tries again instead. Roblox
+#: usually names the wait in `Retry-After`; where it does not, this doubles.
+RETRY_ATTEMPTS = 4
+RETRY_SECONDS = 4.0
 
 
 class PublishError(RuntimeError):
@@ -124,6 +135,7 @@ def publish(
     key: str | None = None,
     base_url: str | None = None,
     poll_seconds: float = POLL_SECONDS,
+    retry_seconds: float = RETRY_SECONDS,
 ) -> Published:
     """Upload one file, wait for Roblox to finish with it, return its asset id.
 
@@ -157,13 +169,13 @@ def publish(
         method = "POST"
 
     body, content_type = _multipart(request, path)
-    answer = _call(url, method, key, body, content_type)
+    answer = _call(url, method, key, body, content_type, retry_seconds=retry_seconds)
 
     operation = answer.get("path", "")
     if answer.get("done") and "response" in answer:
         finished = answer["response"]
     elif operation:
-        finished = _await_operation(operation, key, base_url, poll_seconds)
+        finished = _await_operation(operation, key, base_url, poll_seconds, retry_seconds)
     else:
         raise PublishError(
             f"{path.name}: Roblox accepted the upload but named no operation to "
@@ -176,12 +188,14 @@ def publish(
     return Published(path, got, finished.get("revisionId"), created=asset_id is None)
 
 
-def _await_operation(operation: str, key: str, base_url: str, poll_seconds: float) -> dict:
+def _await_operation(
+    operation: str, key: str, base_url: str, poll_seconds: float, retry_seconds: float
+) -> dict:
     """Wait for the asset to exist. Moderation runs inside this."""
     identifier = operation.rsplit("/", 1)[-1]
     url = f"{base_url}/operations/{identifier}"
     for _ in range(POLL_ATTEMPTS):
-        answer = _call(url, "GET", key, None, None)
+        answer = _call(url, "GET", key, None, None, retry_seconds=retry_seconds)
         if answer.get("done"):
             if "response" in answer:
                 return answer["response"]
@@ -222,21 +236,50 @@ def _multipart(request: dict, path: Path) -> tuple[bytes, str]:
     return b"\r\n".join(parts), f"multipart/form-data; boundary={boundary}"
 
 
-def _call(url: str, method: str, key: str, body: bytes | None, content_type: str | None) -> dict:
+def _call(
+    url: str,
+    method: str,
+    key: str,
+    body: bytes | None,
+    content_type: str | None,
+    *,
+    retry_seconds: float = RETRY_SECONDS,
+) -> dict:
     headers = {"x-api-key": key}
     if content_type:
         headers["Content-Type"] = content_type
 
-    request = urllib.request.Request(url, data=body, headers=headers, method=method)
+    wait = retry_seconds
+    for attempt in range(RETRY_ATTEMPTS):
+        request = urllib.request.Request(url, data=body, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request) as answer:
+                return json.loads(answer.read() or b"{}")
+        except urllib.error.HTTPError as exc:
+            # 429 is the rate limiter and 5xx is Roblox having a moment. Both
+            # pass. Everything else is about this request and will not.
+            if exc.code != 429 and exc.code < 500:
+                raise PublishError(_explain(exc, key)) from None
+            if attempt == RETRY_ATTEMPTS - 1:
+                raise PublishError(_explain(exc, key)) from None
+            time.sleep(_retry_after(exc, wait))
+            wait *= 2
+        except urllib.error.URLError as exc:
+            raise PublishError(f"could not reach {url}: {_redact(str(exc.reason), key)}") from None
+        except json.JSONDecodeError as exc:
+            raise PublishError(f"{url} answered something that is not JSON: {exc}") from None
+    raise PublishError(f"{url}: gave up after {RETRY_ATTEMPTS} attempts")
+
+
+def _retry_after(error: urllib.error.HTTPError, fallback: float) -> float:
+    """How long Roblox asked us to wait, when it says so."""
+    told = (error.headers or {}).get("Retry-After", "")
     try:
-        with urllib.request.urlopen(request) as answer:
-            return json.loads(answer.read() or b"{}")
-    except urllib.error.HTTPError as exc:
-        raise PublishError(_explain(exc, key)) from None
-    except urllib.error.URLError as exc:
-        raise PublishError(f"could not reach {url}: {_redact(str(exc.reason), key)}") from None
-    except json.JSONDecodeError as exc:
-        raise PublishError(f"{url} answered something that is not JSON: {exc}") from None
+        # Capped: a header saying "come back in an hour" should surface as a
+        # failure to read, not as a command line that appears to have hung.
+        return min(max(float(told), 0.0), 60.0)
+    except (TypeError, ValueError):
+        return fallback
 
 
 def _explain(error: urllib.error.HTTPError, key: str) -> str:
