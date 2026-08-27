@@ -27,6 +27,11 @@ prompt texte, sans coût d'API.
 > des pieds en studs et le ramène à 0,05 — sur de la vraie mocap studio. Un
 > animateur juge à l'œil ; un nombre ne s'arrête pas.
 >
+> **Tu veux une cinématique dans ton jeu à toi ?**
+> **[`docs/CINEMATIQUE_DANS_TON_JEU.md`](docs/CINEMATIQUE_DANS_TON_JEU.md)** :
+> relever ta place, écrire la scène, la générer calée sur tes vrais rigs, et la
+> jouer en jeu réel avec des identifiants publiés.
+>
 > **Tu veux l'identifiant, pas le fichier ?**
 > **[`docs/PUBLIER.md`](docs/PUBLIER.md)** : `linen publish` téléverse par Open
 > Cloud et rend de vrais `rbxassetid://`, sous ton compte ou sous ton groupe,

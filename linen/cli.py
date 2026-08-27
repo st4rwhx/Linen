@@ -252,10 +252,23 @@ def _cmd_survey(args) -> int:
         return 0
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(SURVEY, encoding="utf-8")
-    print(f"{args.out}: a coller dans la barre de commande de Studio")
-    print("  Studio: View > Command Bar, colle, Entree.")
-    print("  Puis copie ce que l'Output affiche (marqueurs compris) dans un fichier,")
-    print("  et passe-le a: linen scene ... --place ce_fichier.json")
+    lines = len(SURVEY.splitlines())
+    # Two different places, and typing the wrong thing in each is the mistake
+    # everyone makes once: this command belongs in a terminal, and what Studio
+    # wants is the Luau *inside* the file, not the command that wrote it.
+    print(f"{args.out} ecrit — {lines} lignes de Luau.")
+    print()
+    print("  Ce qui va dans Studio, c'est le CONTENU de ce fichier, pas cette commande.")
+    print("  La barre de commande de Studio ne parle que Luau.")
+    print()
+    print("  Le plus simple, ici dans le terminal :")
+    print("      linen survey --print | clip        (Windows: copie dans le presse-papier)")
+    print("      linen survey --print | pbcopy      (macOS)")
+    print()
+    print(f"  Ou ouvre {args.out} dans le Bloc-notes et copie tout.")
+    print("  Puis dans Studio : View > Command Bar, colle, Entree.")
+    print("  Copie enfin ce que l'Output affiche dans un fichier, et passe-le a :")
+    print("      linen scene ... --place ce_fichier.json")
     return 0
 
 

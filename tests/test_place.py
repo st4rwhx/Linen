@@ -186,3 +186,34 @@ def test_a_scene_built_against_a_place_reaches_the_script_that_way(tmp_path, cap
     printed = capsys.readouterr().out
     assert "1/2 animations publiees" in printed
     assert "Thug" in printed
+
+
+def test_the_survey_survives_being_flattened_onto_one_line():
+    """Studio's Command Bar may collapse a paste, and a `--` comment then eats
+    everything after it — the whole script, silently, with no output at all.
+
+    Block comments are immune, so the script uses only those. This checks the
+    property rather than the style: with every `--[[ ]]` region removed, no
+    `--` may remain.
+    """
+    import re
+
+    from linen.scene.place import SURVEY
+
+    bare = re.sub(r"--\[\[.*?\]\]", " ", SURVEY, flags=re.DOTALL)
+    # The markers are `--LINEN-PLACE-...--`, which is a `--` inside a string
+    # literal and therefore not a comment at all. Quoted text goes too.
+    bare = re.sub(r'"[^"\n]*"', '""', bare)
+    assert "--" not in bare, (
+        "a line comment outside a block would swallow a flattened paste: "
+        + repr(next(line for line in bare.splitlines() if "--" in line))
+    )
+
+
+def test_the_flattened_survey_still_reaches_its_print():
+    """Everything the script needs must survive losing its newlines."""
+    from linen.scene.place import SURVEY
+
+    flat = " ".join(SURVEY.split())
+    assert flat.count("print(") == 3, "the three prints must still be there"
+    assert flat.rstrip().endswith(f'print("{END}")')

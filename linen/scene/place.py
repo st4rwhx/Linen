@@ -31,101 +31,102 @@ END = "--LINEN-PLACE-END--"
 
 #: Run in Studio. Prints one JSON object between two markers.
 SURVEY = f"""\
---!strict
--- Linen: survey the open place, so a scene can be staged in it rather than in
--- a void. Paste this into the Command Bar (View > Command Bar) and press
--- Enter, then copy everything between the two markers into a file.
---
--- It reads. It changes nothing.
+--[[ Linen: survey the open place, so a scene can be staged in it rather than
+     in a void.
+
+     THIS IS LUAU, and it goes in Roblox Studio: View > Command Bar, paste all
+     of it, press Enter. `linen survey` itself is a terminal command; the
+     Command Bar cannot run it and will answer "Incomplete statement".
+
+     Then copy what the Output window prints, markers and all, into a file and
+     pass that file to `linen scene --place`.
+
+     It reads. It changes nothing.
+
+     Every comment here is a block comment on purpose: the Command Bar may
+     flatten a paste onto one line, and a `--` comment would then swallow the
+     rest of the script. ]]
 
 local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 
 local MAX_LANDMARKS = 60
 local MAX_SOUNDS = 40
 
 local function round(value: number): number
-\treturn math.floor(value * 100 + 0.5) / 100
+	return math.floor(value * 100 + 0.5) / 100
 end
 
 local function vec(v: Vector3): {{ number }}
-\treturn {{ round(v.X), round(v.Y), round(v.Z) }}
+	return {{ round(v.X), round(v.Y), round(v.Z) }}
 end
 
--- A rig is a Model with a Humanoid. Which rig it is comes from the parts it
--- has: only R15 splits the torso in two, and only R6 has a part called Torso.
+--[[ A rig is a Model with a Humanoid. Which rig it is comes from the parts it
+     has: only R15 splits the torso in two, and only R6 has one called Torso. ]]
 local function rigKind(model: Model): string?
-\tif model:FindFirstChild("UpperTorso") and model:FindFirstChild("LowerTorso") then
-\t\treturn "R15"
-\telseif model:FindFirstChild("Torso") then
-\t\treturn "R6"
-\tend
-\treturn nil
+	if model:FindFirstChild("UpperTorso") and model:FindFirstChild("LowerTorso") then
+		return "R15"
+	elseif model:FindFirstChild("Torso") then
+		return "R6"
+	end
+	return nil
 end
 
 local rigs = {{}}
 local landmarks = {{}}
 local sounds = {{}}
 
-for _, descendant in Workspace:GetDescendants() do
-\tif descendant:IsA("Humanoid") then
-\t\tlocal model = descendant.Parent
-\t\tif model and model:IsA("Model") then
-\t\t\tlocal pivot = model:GetPivot()
-\t\t\tlocal _, yaw = pivot:ToOrientation()
-\t\t\ttable.insert(rigs, {{
-\t\t\t\tname = model.Name,
-\t\t\t\trig = rigKind(model) or "unknown",
-\t\t\t\tposition = vec(pivot.Position),
-\t\t\t\tyaw = round(math.deg(yaw)),
-\t\t\t\tisPlayer = game:GetService("Players"):GetPlayerFromCharacter(model) ~= nil,
-\t\t\t}})
-\t\tend
-\telseif descendant:IsA("Sound") and descendant.SoundId ~= "" then
-\t\tif #sounds < MAX_SOUNDS then
-\t\t\ttable.insert(sounds, {{
-\t\t\t\tname = descendant.Name,
-\t\t\t\tid = descendant.SoundId,
-\t\t\t\tparent = descendant.Parent and descendant.Parent.Name or "",
-\t\t\t}})
-\t\tend
-\tend
-end
-
--- Landmarks are what a camera can be pointed at and what a scene can be placed
--- against. Anonymous scenery is not one: a hundred parts called "Part" tell you
--- nothing, so they are left out and only what someone bothered to name is kept.
+--[[ Anonymous scenery is not a landmark: a hundred parts called "Part" tell
+     you nothing, so only what someone bothered to name is kept. ]]
 local anonymous = {{ Part = true, Wedge = true, MeshPart = true, Union = true, Model = true }}
-for _, child in Workspace:GetDescendants() do
-\tif #landmarks >= MAX_LANDMARKS then
-\t\tbreak
-\tend
-\tlocal keep = false
-\tlocal position, size
-\tif child:IsA("BasePart") and not child.Parent:FindFirstChildOfClass("Humanoid") then
-\t\tkeep = not anonymous[child.Name]
-\t\tposition, size = child.Position, child.Size
-\telseif child:IsA("Model") and child.PrimaryPart and not child:FindFirstChildOfClass("Humanoid") then
-\t\tkeep = not anonymous[child.Name]
-\t\tlocal box, extent = child:GetBoundingBox()
-\t\tposition, size = box.Position, extent
-\tend
-\tif keep and position and size then
-\t\ttable.insert(landmarks, {{
-\t\t\tname = child.Name,
-\t\t\tclass = child.ClassName,
-\t\t\tposition = vec(position),
-\t\t\tsize = vec(size),
-\t\t}})
-\tend
+
+for _, thing in Workspace:GetDescendants() do
+	if thing:IsA("Humanoid") then
+		local model = thing.Parent
+		if model and model:IsA("Model") then
+			local pivot = model:GetPivot()
+			local _, yaw = pivot:ToOrientation()
+			table.insert(rigs, {{
+				name = model.Name,
+				rig = rigKind(model) or "unknown",
+				position = vec(pivot.Position),
+				yaw = round(math.deg(yaw)),
+				isPlayer = Players:GetPlayerFromCharacter(model) ~= nil,
+			}})
+		end
+	elseif thing:IsA("Sound") and thing.SoundId ~= "" and #sounds < MAX_SOUNDS then
+		table.insert(sounds, {{
+			name = thing.Name,
+			id = thing.SoundId,
+			parent = thing.Parent and thing.Parent.Name or "",
+		}})
+	elseif #landmarks < MAX_LANDMARKS and not anonymous[thing.Name] then
+		local position, size = nil, nil
+		if thing:IsA("BasePart") and thing.Parent and not thing.Parent:FindFirstChildOfClass("Humanoid") then
+			position, size = thing.Position, thing.Size
+		elseif thing:IsA("Model") and thing.PrimaryPart and not thing:FindFirstChildOfClass("Humanoid") then
+			local box, extent = thing:GetBoundingBox()
+			position, size = box.Position, extent
+		end
+		if position and size then
+			table.insert(landmarks, {{
+				name = thing.Name,
+				class = thing.ClassName,
+				position = vec(position),
+				size = vec(size),
+			}})
+		end
+	end
 end
 
 print("{BEGIN}")
-print(game:GetService("HttpService"):JSONEncode({{
-\tplace = game.Name,
-\tplaceId = game.PlaceId,
-\trigs = rigs,
-\tlandmarks = landmarks,
-\tsounds = sounds,
+print(HttpService:JSONEncode({{
+	place = game.Name,
+	placeId = game.PlaceId,
+	rigs = rigs,
+	landmarks = landmarks,
+	sounds = sounds,
 }}))
 print("{END}")
 """
