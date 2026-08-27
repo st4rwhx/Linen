@@ -199,6 +199,10 @@ LANES: dict[str, str] = {
     "vfx": "#e88f6a",
     "sound": "#9aa4b2",
     "spot": "#9aa4b2",
+    # Contact is solved into the animation rather than fired at playback, so it
+    # is the one lane where the marker shows where a correction was made rather
+    # than where something happens.
+    "contact": "#e86a8f",
 }
 
 

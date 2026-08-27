@@ -40,6 +40,11 @@ KINDS: tuple[str, ...] = (
     "camera",
     #: Show a line of dialogue.
     "line",
+    #: Land a hand on another character, or on something in the place. Unlike
+    #: every other kind here this one *changes the animation*: it is solved
+    #: into the clip rather than fired at playback, because where a hand has to
+    #: be is not something a capture of one person can know.
+    "contact",
 )
 
 #: FaceControls is a 50-pose FACS rig. These are the presets the director may
@@ -149,6 +154,12 @@ class Event:
     shot: str | None = None
     #: line
     text: str | None = None
+    #: contact — which hand, and what it lands on.
+    limb: str | None = None
+    #: The actor being touched, or None for something in the place.
+    target_actor: str | None = None
+    #: The part of them, or the landmark's name.
+    target_part: str | None = None
     #: How long a line stays up, or an expression holds.
     hold: float = 2.0
 
@@ -195,6 +206,30 @@ class Event:
             )
         if self.kind == "line" and not (self.text or "").strip():
             raise EventError("a line event needs 'text'")
+        if self.kind == "contact":
+            from .contact import CHAINS
+
+            if self.actor is None:
+                raise EventError("a contact event needs the 'actor' doing the reaching")
+            if self.limb not in CHAINS:
+                raise EventError(
+                    f"contact event: unknown limb {self.limb!r}; "
+                    f"choose from {', '.join(sorted(CHAINS))}"
+                )
+            if not (self.target_part or "").strip():
+                raise EventError(
+                    "a contact event needs a 'target_part' — the part of the other "
+                    "character, or the name of something in the place"
+                )
+            if self.target_actor is not None and self.target_actor not in cast:
+                raise EventError(
+                    f"contact event reaches for {self.target_actor!r}, who is not "
+                    f"in the cast"
+                )
+            if self.target_actor == self.actor:
+                raise EventError(f"{self.actor} cannot reach for themselves")
+            if self.hold <= 0:
+                raise EventError("a contact event needs a positive 'hold'")
 
     @property
     def marker_name(self) -> str:

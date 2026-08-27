@@ -1005,6 +1005,11 @@ def _cmd_scene(args) -> int:
 
             write_preview(clip, args.out / f"{scene.name}_{actor_name}.json")
 
+    if built.reaches:
+        print(f"  {len(built.reaches)} contacts resolus dans l'animation :")
+        for reach in built.reaches:
+            print(f"    {reach.line()}")
+
     if built.director:
         print(f"  {len(built.director)} evenements sur l'horloge du realisateur "
               f"(camera, effets de decor)")

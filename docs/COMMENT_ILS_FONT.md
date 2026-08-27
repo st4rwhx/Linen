@@ -144,38 +144,69 @@ un jeu commercial, et ça ne réglerait ni le contact ni la présentation.
 
 ---
 
-## 6. Le choix, avec les chiffres
+## 6. Le choix : ne dépendre de personne
 
-Relevé en août 2026, prix et licences vérifiés à la source.
+Ce que j'avais écrit ici — « teste NoCapMocap pour 9 $ » — mélangeait deux
+choses qui n'ont rien à voir.
 
-| | Prix | Licence commerciale | Sortie | Ce que ça règle |
-| --- | --- | --- | --- | --- |
-| **CMU** | **gratuit** | oui, explicitement, y compris commercial | `.bvh` | 2548 mouvements réels. Le socle. |
-| **NoCapMocap** | **9 $/mois** (50 crédits ≈ 50 s), 29 $ (250), 79 $ (1000). Packs à partir de 7 $ / 25 crédits | **oui — « you may use generated animation files in personal and commercial projects »**, et tu restes propriétaire | R15 natif + FBX | Texte → mouvement, et vidéo → mouvement (beta, 20 s max, une personne) |
-| **Mixamo** | gratuit | oui, illimité ; interdiction de redistribuer les fichiers bruts | `.dae` | Combat, armes, morts stylisées |
-| **Cascadeur** | **12 $/mois** indie (< 100 k$ de revenus/an) ; version gratuite non commerciale | oui sur les plans payants | **`.dae`**, FBX | **Le contact.** AutoPosing, AutoPhysics, ragdoll, inbetweening IA |
-| **WHAM / TRAM / GVHMR** | gratuit | **NON** — SMPL interdit tout usage commercial | — | rien qu'on ait le droit d'utiliser |
+**Se procurer du mouvement n'est pas une dépendance.** CMU, c'est 2548 captures
+que tu **télécharges et que tu possèdes**, gratuites y compris commercialement,
+qui ne peuvent plus t'être retirées. Mixamo pareil. Un abonnement, si.
 
-**Le détail qui compte** : NoCapMocap facture **1 crédit par seconde générée** et rend
-**quatre variantes** pour ce crédit. La scène `Contre` fait 7,45 s à deux acteurs,
-soit ~15 s de mouvement — **le plan à 9 $ la couvre trois fois**, ratés compris.
+Et j'avais tort sur un point de fait : j'ai écrit que la mocap depuis vidéo
+« s'achète, elle ne se reconstruit pas ». **C'est vrai seulement de la branche
+SMPL.** MediaPipe est en **Apache 2.0**, utilisable commercialement sans
+restriction, il sort des points 3D — et Linen le lit déjà, c'est le chemin
+FreeMoCap d'origine. MMPose est aussi en Apache 2.0. Il y a donc une route
+vidéo → mouvement qui est **libre, auto-hébergeable et à nous**. Elle est moins
+précise que WHAM. Elle est légale, et elle ne s'arrête pas si quelqu'un ferme
+boutique.
 
-Et Cascadeur exporte du **`.dae`**, que le lecteur Collada d'ici lit déjà. Une
-pose corrigée à la main dans Cascadeur entre dans une bibliothèque Linen sans
-conversion. *(Non testé de bout en bout : le format est standard, mais personne
-ici n'a fait tourner Cascadeur.)*
+| | Possédé ? | Prix | Ce que ça règle |
+| --- | --- | --- | --- |
+| **CMU** | oui, pour toujours | 0 € | 2548 mouvements réels |
+| **Mixamo** | oui, les fichiers sont à toi | 0 € | combat, armes |
+| **Ta vidéo → MediaPipe** | oui, tout le code est à nous | 0 € | le geste exact que personne n'a capturé |
+| **Contact solvé par Linen** | oui, c'est notre code | 0 € | **ce que personne ne vend** |
+| Service par abonnement | non | 9-79 $/mois | rien qu'on ne puisse faire autrement |
 
-### La recommandation
+## 7. Ce qui rend Linen meilleur qu'eux — et c'est fait
 
-1. **CMU ce soir.** Gratuit, définitif, sans risque. C'est le plancher.
-2. **NoCapMocap Starter, un mois, 9 $.** C'est le seul moyen de savoir si leur
-   qualité vaut le coup, et ça coûte moins qu'une pizza. Tu restes propriétaire
-   et l'usage commercial est écrit noir sur blanc.
-3. **Cascadeur seulement si le contact te gêne encore.** C'est le seul outil de
-   toute cette page qui attaque ce problème — et le contact, c'est justement
-   toute ta scène de bagarre.
+Un service génère **un clip d'une personne seule**. C'est structurellement
+incapable de savoir que *cette* main doit se fermer sur *ce* col, d'un
+personnage de *cette* taille, debout *là*. L'information n'est dans aucun clip,
+à aucun prix.
 
-**Coût pour savoir : 9 $.** Pas un chantier de six mois.
+Elle est dans la **scène** : Linen sait où sont les deux corps, comment ils
+regardent, et où est chaque articulation à chaque image. Il ne manquait que la
+dernière étape — plier le bras pour que la main arrive.
+
+`linen scene` la fait maintenant :
+
+```json
+{ "kind": "contact", "actor": "Hero", "cue": "plaque", "offset": 0.05,
+  "limb": "RightHand", "target_actor": "Enemy", "target_part": "UpperTorso",
+  "hold": 0.5 }
+```
+
+```
+8 contacts resolus dans l'animation :
+  Hero.LeftHand  -> Enemy.RightLowerArm [3.23-3.68s] atteint
+  Hero.RightHand -> Enemy.UpperTorso    [3.78-4.28s] atteint
+  Enemy.RightHand -> Hero.Head          [2.37-2.49s] a 0.85 stud pres
+```
+
+C'est la même IK deux-os analytique que la pose des pieds, pointée sur un bras :
+plier le coude pour mettre le poignet à la bonne distance, puis orienter le bras
+entier. Le coude plie dans le plan que la pose indique déjà, pas dans un plan
+décrété — un coude à l'envers se voit immédiatement.
+
+**Et ce qui ne peut pas être atteint est mesuré, pas caché.** Un bras Roblox a
+une longueur fixe ; l'étirer n'est pas une option. Alors la main va aussi loin
+qu'elle peut et le manque est rapporté **en studs**, comme le patinage des pieds
+et la boucle. « À 0,85 stud près » te dit de rapprocher les acteurs ou de viser
+plus bas. Un service, lui, te rend un clip qui a l'air bien et rate la cible en
+silence.
 
 ## Ce qui reste un vrai chantier de code, si un jour on le veut
 

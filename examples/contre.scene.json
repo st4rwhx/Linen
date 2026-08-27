@@ -360,6 +360,86 @@
       "expression": "pain",
       "actor": "Enemy",
       "cue": "impact"
+    },
+    {
+      "kind": "contact",
+      "actor": "Enemy",
+      "limb": "RightHand",
+      "cue": "saisit",
+      "offset": 0.15,
+      "hold": 1.4,
+      "target_actor": "Hero",
+      "target_part": "UpperTorso"
+    },
+    {
+      "kind": "contact",
+      "actor": "Enemy",
+      "limb": "LeftHand",
+      "cue": "saisit",
+      "offset": 0.15,
+      "hold": 1.4,
+      "target_actor": "Hero",
+      "target_part": "UpperTorso"
+    },
+    {
+      "kind": "contact",
+      "actor": "Enemy",
+      "limb": "RightHand",
+      "cue": "frappe1",
+      "offset": 0.22,
+      "hold": 0.12,
+      "target_actor": "Hero",
+      "target_part": "Head"
+    },
+    {
+      "kind": "contact",
+      "actor": "Enemy",
+      "limb": "LeftHand",
+      "cue": "frappe2",
+      "offset": 0.2,
+      "hold": 0.12,
+      "target_actor": "Hero",
+      "target_part": "Head"
+    },
+    {
+      "kind": "contact",
+      "actor": "Hero",
+      "limb": "LeftHand",
+      "cue": "contre",
+      "offset": 0.1,
+      "hold": 0.45,
+      "target_actor": "Enemy",
+      "target_part": "RightLowerArm"
+    },
+    {
+      "kind": "contact",
+      "actor": "Hero",
+      "limb": "RightHand",
+      "cue": "plaque",
+      "offset": 0.05,
+      "hold": 0.5,
+      "target_actor": "Enemy",
+      "target_part": "UpperTorso"
+    },
+    {
+      "kind": "contact",
+      "actor": "Hero",
+      "limb": "LeftHand",
+      "cue": "plaque",
+      "offset": 0.05,
+      "hold": 0.5,
+      "target_actor": "Enemy",
+      "target_part": "UpperTorso"
+    },
+    {
+      "kind": "contact",
+      "actor": "Hero",
+      "limb": "RightHand",
+      "cue": "desarme",
+      "offset": 0.1,
+      "hold": 0.25,
+      "target_actor": "Enemy",
+      "target_part": "RightHand"
     }
   ]
 }

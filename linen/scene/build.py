@@ -60,6 +60,9 @@ class BuiltScene:
     #: Events with no actor — camera cuts, world effects — on the director's
     #: clock, in seconds.
     director: list[tuple[float, object]] = field(default_factory=list)
+    #: What each contact actually achieved, in studs. A reach that fell short
+    #: is reported rather than absorbed: an arm has a fixed length.
+    reaches: list = field(default_factory=list)
 
     @property
     def duration(self) -> float:
@@ -83,13 +86,123 @@ def build_scene(
     schedule = _schedule(scene, planned)
     clips = _splice(scene, schedule, seed)
     markers, director = _place_events(scene, schedule)
+    reaches = _solve_contacts(scene, schedule, clips)
     return BuiltScene(
         scene=scene,
         clips=clips,
         schedule=schedule,
         markers=markers,
         director=director,
+        reaches=reaches,
     )
+
+
+def _actor_yaw(scene: Scene, actor) -> float:
+    """Which way an actor faces, as degrees, however the scene said it.
+
+    `facing` may name another actor, which is a relationship rather than an
+    angle — it stays true when either of them moves, and it has to be resolved
+    against the staging before any contact can be solved in world space.
+    """
+    if isinstance(actor.facing, (int, float)):
+        return float(actor.facing)
+    if isinstance(actor.facing, str):
+        other = scene.actor(actor.facing)
+        offset = np.asarray(other.position, dtype=float) - np.asarray(
+            actor.position, dtype=float
+        )
+        if float(np.linalg.norm(offset[[0, 2]])) > 1e-6:
+            return float(np.degrees(np.arctan2(offset[0], offset[2])))
+    return 0.0
+
+
+def _solve_contacts(scene: Scene, schedule: list[ScheduledCue], clips) -> list:
+    """Bend the reaching arm so the hand arrives, for every contact event.
+
+    This runs after splicing because it needs the finished animation: where a
+    hand already is decides how far it has to travel, and both bodies have to
+    be placed before either can be aimed at the other.
+    """
+    from .contact import BLEND_SECONDS, Reach, base_frame, solve_reach
+
+    contacts = [event for event in scene.events if event.kind == "contact"]
+    if not contacts:
+        return []
+
+    starts = {entry.cue.id: entry.start for entry in schedule}
+    bases = {
+        actor.name: base_frame(actor.position, _actor_yaw(scene, actor))
+        for actor in scene.actors
+    }
+    blend = max(round(BLEND_SECONDS * scene.fps), 1)
+    reaches = []
+
+    for event in contacts:
+        clip = clips.get(event.actor)
+        if clip is None:
+            continue
+        begin = starts[event.cue] + event.offset
+        frames = range(
+            max(round(begin * scene.fps), 0),
+            min(round((begin + event.hold) * scene.fps) + 1, clip.frame_count),
+        )
+        if not frames:
+            continue
+
+        targets = _contact_targets(scene, clips, bases, event, frames)
+        if targets is None:
+            continue
+
+        fixed, shortfall = solve_reach(
+            clip, bases[event.actor], event.limb, targets, blend_frames=blend
+        )
+        clips[event.actor] = fixed
+        reaches.append(
+            Reach(
+                actor=event.actor,
+                limb=event.limb,
+                target=f"{event.target_actor or 'decor'}.{event.target_part}",
+                start=begin,
+                stop=begin + event.hold,
+                shortfall=shortfall,
+            )
+        )
+    return reaches
+
+
+def _contact_targets(scene: Scene, clips, bases, event, frames):
+    """Where the hand has to be, per frame, in world studs.
+
+    A target on another actor moves with them, so it is read per frame from
+    that actor's own animation. A target in the place stands still, and the
+    scene has no geometry for it, so it is refused rather than guessed at.
+    """
+    from .contact import world_point
+
+    if event.target_actor is None:
+        # Reaching for scenery would need the place's geometry, which a scene
+        # built without `--place` does not have. Saying so beats putting the
+        # hand at the origin.
+        raise SceneError(
+            f"contact on cue {event.cue!r} reaches for {event.target_part!r} with no "
+            f"'target_actor'. Reaching for something in the place is not solved yet; "
+            f"name the character being touched instead."
+        )
+
+    other = clips.get(event.target_actor)
+    if other is None:
+        return None
+    if event.target_part not in other.rig._by_name:
+        raise SceneError(
+            f"contact on cue {event.cue!r} reaches for {event.target_actor}."
+            f"{event.target_part!r}, which is not a part of a {other.rig.name} rig"
+        )
+
+    base = bases[event.target_actor]
+    return {
+        frame: world_point(other, min(frame, other.frame_count - 1), event.target_part, base)
+        for frame in frames
+    }
 
 
 def _place_events(scene: Scene, schedule: list[ScheduledCue]):
@@ -105,6 +218,10 @@ def _place_events(scene: Scene, schedule: list[ScheduledCue]):
     director: list[tuple[float, object]] = []
 
     for event in scene.events:
+        if event.kind == "contact":
+            # Solved into the animation, not fired at playback. A marker for it
+            # would tell the runtime to do something that has already been done.
+            continue
         when = starts[event.cue] + event.offset
         if when < 0:
             raise SceneError(
