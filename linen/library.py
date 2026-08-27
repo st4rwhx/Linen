@@ -46,13 +46,11 @@ import numpy as np
 from .generate.offline import normalize
 from .rigs import get_rig
 from .rigs.kinematics import place_rotations
+from .sources import MOTION_SUFFIXES
 
 #: Index files declare this so a stale catalogue is refused rather than
 #: half-understood.
 FORMAT_VERSION = 1
-
-#: Suffixes worth trying to index.
-MOTION_SUFFIXES = (".bvh",)
 
 
 class LibraryError(ValueError):
@@ -225,9 +223,9 @@ def _index_one(
     rig: str,
 ) -> Entry:
     from .retarget import SolveOptions, solve_clip
-    from .sources import load_bvh
+    from .sources import load_motion
 
-    track = load_bvh(path, skeleton=skeleton, units=units)
+    track = load_motion(path, skeleton=skeleton, units=units)
     clip = solve_clip(get_rig(rig), track, SolveOptions())
 
     description = descriptions.get(path.stem, "") or _readable(path.stem)

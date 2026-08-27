@@ -565,6 +565,18 @@ def _add_scene(sub) -> None:
         ),
     )
     parser.add_argument(
+        "--library",
+        type=Path,
+        default=None,
+        help=(
+            "a `linen library build` index. A cue whose words match a real "
+            "capture is played by that capture instead of by the pose "
+            "vocabulary — which knows a dozen verbs and draws them. For a "
+            "grapple, a shove or a throw, that is the difference between a "
+            "scene that reads and one that does not."
+        ),
+    )
+    parser.add_argument(
         "--animations",
         type=Path,
         default=None,
@@ -943,7 +955,14 @@ def _cmd_scene(args) -> int:
         args.save_scene.write_text(json.dumps(scene.to_dict(), indent=2))
         print(f"{args.save_scene}: scene")
 
-    built = build_scene(scene, planner=args.planner, seed=args.seed)
+    library = None
+    if args.library:
+        from .library import Library
+
+        library = Library.load(args.library)
+        print(f"bibliotheque: {len(library.entries)} captures")
+
+    built = build_scene(scene, planner=args.planner, seed=args.seed, library=library)
 
     # Spotting comes before the clips are written, because it adds markers to
     # them: a derived footstep rides the animation exactly like an authored

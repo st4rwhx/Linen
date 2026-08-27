@@ -25,6 +25,15 @@ from .schema import Cue, Scene, SceneError
 #: Seconds spent easing from whatever an actor was holding into a new cue.
 CUE_BLEND = 0.12
 
+#: Whether a capture answers a cue at all is `library.search`'s decision, not a
+#: threshold here. It scores against the corpus, so the same words score
+#: differently in a library of eleven clips and one of two thousand — an
+#: absolute floor would refuse real matches in a small library and admit poor
+#: ones in a large one. Measured on a real eleven-clip index: genuine matches
+#: came back at 0.44 to 1.35, and "shove", "xyzzy quux" and "mange une pomme"
+#: came back with nothing at all. `linen prompt --library` takes the top hit
+#: the same way, so the same words give the same clip in both commands.
+
 
 @dataclass
 class ScheduledCue:
@@ -33,6 +42,11 @@ class ScheduledCue:
     start: float
     end: float
     source: str
+    #: When the cue was answered by a real capture rather than by the pose
+    #: vocabulary: the file to retarget. Held as a path rather than a clip
+    #: because the rig is not known until splicing — two actors may play the
+    #: same beat on different rigs.
+    capture: str | None = None
 
 
 @dataclass
@@ -53,12 +67,19 @@ class BuiltScene:
 
 
 def build_scene(
-    scene: Scene, *, planner: str = "auto", seed: int = 0
+    scene: Scene, *, planner: str = "auto", seed: int = 0, library=None
 ) -> BuiltScene:
-    """Plan, schedule and synthesise every cue in ``scene``."""
+    """Plan, schedule and synthesise every cue in ``scene``.
+
+    With a ``library``, a cue whose words match a real capture is answered by
+    that capture instead of by the pose vocabulary. The vocabulary knows a
+    dozen verbs and draws them; a library knows what a body actually does. For
+    anything the vocabulary has no word for — a grapple, a shove, a throw — it
+    is the difference between a scene that reads and one that does not.
+    """
     scene.validate()
 
-    planned = _plan_cues(scene, planner)
+    planned = _plan_cues(scene, planner, library)
     schedule = _schedule(scene, planned)
     clips = _splice(scene, schedule, seed)
     markers, director = _place_events(scene, schedule)
@@ -108,24 +129,52 @@ def _place_events(scene: Scene, schedule: list[ScheduledCue]):
     return markers, director
 
 
-def _plan_cues(scene: Scene, planner: str) -> dict[str, tuple[MotionPlan, str]]:
+def _plan_cues(scene: Scene, planner: str, library=None) -> dict[str, tuple]:
     """Every cue gets its plan first, because scheduling needs its length."""
-    planned: dict[str, tuple[MotionPlan, str]] = {}
+    planned: dict[str, tuple] = {}
     for cue in scene.cues:
+        capture = None
         if cue.plan is not None:
             plan, source = MotionPlan.from_dict(dict(cue.plan)), "inline"
+        elif library is not None and cue.prompt and (hit := _from_library(library, cue)):
+            plan, source, capture = hit
         else:
             plan, source = plan_for_prompt(cue.prompt or "", fps=scene.fps, planner=planner)
         plan = fit_duration(plan, cue.duration, strategy=cue.fit)
         plan.fps = scene.fps
         plan.loop = plan.loop or cue.loop
-        planned[cue.id] = (plan, source)
+        planned[cue.id] = (plan, source, capture)
     return planned
 
 
-def _schedule(
-    scene: Scene, planned: dict[str, tuple[MotionPlan, str]]
-) -> list[ScheduledCue]:
+def _from_library(library, cue: Cue):
+    """The best capture for this cue's words, if the library has one.
+
+    A miss is not a failure: a scene mixes beats the library covers with beats
+    it does not, and the vocabulary still answers the rest. Silently swapping
+    in a poor match would be worse than drawing the beat.
+    """
+    from ..generate.schema import MotionPlan, Segment
+
+    hits = library.search(cue.prompt or "", limit=1)
+    if not hits:
+        return None
+    _score, entry = hits[0]
+    # The plan exists only to carry a length into scheduling — nothing is ever
+    # synthesised from it, because the capture replaces it at splice time. It
+    # still has to be a valid plan, so it holds one resting segment; if the
+    # capture ever failed to load, a still actor is a better answer than a
+    # crash halfway through a scene.
+    length = cue.duration or entry.duration
+    plan = MotionPlan(
+        name=entry.name,
+        segments=[Segment(start=0.0, end=max(length, 0.05), pose="rest")],
+        notes=f"capture {entry.name}: {entry.description}",
+    )
+    return plan, f"library:{entry.name}", str(library.resolve(entry))
+
+
+def _schedule(scene: Scene, planned: dict[str, tuple]) -> list[ScheduledCue]:
     """Turn anchors into absolute times, then check nobody is double-booked."""
     starts: dict[str, float] = {}
     by_id = {cue.id: cue for cue in scene.cues}
@@ -175,6 +224,7 @@ def _schedule(
             start=resolve(cue.id),
             end=resolve(cue.id) + planned[cue.id][0].duration,
             source=planned[cue.id][1],
+            capture=planned[cue.id][2],
         )
         for cue in scene.cues
     ]
@@ -225,7 +275,11 @@ def _splice(scene: Scene, schedule: list[ScheduledCue], seed: int) -> dict[str, 
         }
 
         for entry in (e for e in schedule if e.cue.actor == actor.name):
-            cue_clip = synthesize(entry.plan, rig, seed=seed)
+            cue_clip = (
+                _capture_clip(entry, rig, scene.fps)
+                if entry.capture
+                else synthesize(entry.plan, rig, seed=seed)
+            )
             offset = round(entry.start * scene.fps)
             length = min(cue_clip.frame_count, frames - offset)
             if length <= 0:
@@ -247,6 +301,39 @@ def _splice(scene: Scene, schedule: list[ScheduledCue], seed: int) -> dict[str, 
             metadata={"source": "scene", "scene": scene.name, "actor": actor.name},
         )
     return clips
+
+
+def _capture_clip(entry: ScheduledCue, rig, fps: float) -> AnimationClip:
+    """Retarget the capture answering this cue, windowed to the cue's length.
+
+    Retargeting happens here rather than at planning time because it needs the
+    rig, and the same beat may be played by an R15 hero and an R6 thug.
+
+    Which stretch of the take to use is `best_window`'s decision, the same one
+    `linen prompt --library` makes: a fifteen-second take rarely wants its
+    first two seconds, it wants the two seconds that answer the beat.
+    """
+    from ..library import best_window
+    from ..retarget import SolveOptions, solve_clip
+    from ..sources import load_motion
+
+    track = load_motion(entry.capture, skeleton="mixamo", units="cm")
+    clip = solve_clip(rig, track, SolveOptions(root_motion=False, smoothing_frames=3))
+    clip.name = entry.plan.name
+
+    wanted = (entry.end - entry.start) or clip.duration
+    lo, hi = best_window(clip, track, entry.cue.prompt or "", wanted)
+    if lo <= 0 and hi >= clip.frame_count:
+        return clip
+    return AnimationClip(
+        rig=clip.rig,
+        fps=clip.fps,
+        rotations={part: track_[lo:hi] for part, track_ in clip.rotations.items()},
+        name=clip.name,
+        metadata=dict(clip.metadata),
+        loop=clip.loop,
+        priority=clip.priority,
+    )
 
 
 def _blend_in(

@@ -47,3 +47,22 @@ def load_bvh(path, *, skeleton: str = "mixamo", units: str = "cm", fps: float | 
     """Parse a BVH file and map it onto MediaPipe landmark names."""
     motion = parse_bvh(path)
     return to_landmark_track(motion, get_skeleton(skeleton), units=units, fps=fps)
+
+
+#: What a capture may arrive as. Mixamo exports Collada without Blender in the
+#: way, so `.dae` is not an afterthought here — it is the format someone
+#: building a library from Mixamo actually has on disk.
+MOTION_SUFFIXES = (".bvh", ".dae")
+
+
+def load_motion(path, *, skeleton: str = "mixamo", units: str = "cm", fps=None):
+    """A capture as a landmark track, whatever file it came in.
+
+    Callers that hardcode `load_bvh` quietly exclude every Mixamo download,
+    which is most of what a library is built from.
+    """
+    from pathlib import Path as _Path
+
+    if _Path(path).suffix.lower() == ".dae":
+        return load_collada(path, skeleton=skeleton, units=units, fps=fps)
+    return load_bvh(path, skeleton=skeleton, units=units, fps=fps)

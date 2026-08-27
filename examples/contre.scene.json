@@ -1,0 +1,365 @@
+{
+  "name": "Contre",
+  "fps": 30,
+  "notes": "L'Enemy plaque le Hero au mur et le frappe. Le Hero contre, le plaque a son tour, lui prend son couteau et le lance. Temps absolus : retimer un coup veut dire decaler sa reaction du meme nombre.",
+  "actors": [
+    {
+      "name": "Hero",
+      "rig": "R15",
+      "facing": "Enemy"
+    },
+    {
+      "name": "Enemy",
+      "rig": "R15",
+      "facing": "Hero"
+    }
+  ],
+  "props": [
+    {
+      "name": "Couteau",
+      "source": "ReplicatedStorage.Props.Couteau",
+      "held_by": "Enemy",
+      "attach_to": "RightHand",
+      "grip": [
+        0,
+        -0.4,
+        0
+      ]
+    }
+  ],
+  "cues": [
+    {
+      "id": "approche",
+      "actor": "Enemy",
+      "at": 0.0,
+      "duration": 0.9,
+      "prompt": "il avance vite sur lui"
+    },
+    {
+      "id": "saisit",
+      "actor": "Enemy",
+      "at": 0.9,
+      "duration": 0.55,
+      "prompt": "il attrape et pousse des deux mains"
+    },
+    {
+      "id": "maintient",
+      "actor": "Enemy",
+      "at": 1.45,
+      "duration": 0.7,
+      "prompt": "il le tient plaque contre le mur"
+    },
+    {
+      "id": "frappe1",
+      "actor": "Enemy",
+      "at": 2.15,
+      "duration": 0.45,
+      "prompt": "coup de poing droit"
+    },
+    {
+      "id": "frappe2",
+      "actor": "Enemy",
+      "at": 2.6,
+      "duration": 0.45,
+      "prompt": "coup de poing gauche"
+    },
+    {
+      "id": "surpris",
+      "actor": "Enemy",
+      "at": 3.23,
+      "duration": 0.57,
+      "prompt": "il est desequilibre"
+    },
+    {
+      "id": "encastre",
+      "actor": "Enemy",
+      "at": 3.83,
+      "duration": 0.55,
+      "prompt": "il recule violemment et se cogne"
+    },
+    {
+      "id": "lache",
+      "actor": "Enemy",
+      "at": 4.43,
+      "duration": 0.5,
+      "prompt": "il reste plaque au mur"
+    },
+    {
+      "id": "fige",
+      "actor": "Enemy",
+      "at": 4.98,
+      "duration": 0.42,
+      "prompt": "il reste immobile"
+    },
+    {
+      "id": "impact",
+      "actor": "Enemy",
+      "at": 5.45,
+      "duration": 0.5,
+      "prompt": "la tete part en arriere"
+    },
+    {
+      "id": "tombe",
+      "actor": "Enemy",
+      "at": 5.95,
+      "duration": 1.5,
+      "prompt": "il glisse le long du mur"
+    },
+    {
+      "id": "garde",
+      "actor": "Hero",
+      "at": 0.0,
+      "duration": 0.9,
+      "prompt": "il reste immobile"
+    },
+    {
+      "id": "projete",
+      "actor": "Hero",
+      "at": 0.98,
+      "duration": 0.55,
+      "prompt": "il recule violemment"
+    },
+    {
+      "id": "cloue",
+      "actor": "Hero",
+      "at": 1.53,
+      "duration": 0.75,
+      "prompt": "il se debat contre le mur"
+    },
+    {
+      "id": "encaisse1",
+      "actor": "Hero",
+      "at": 2.28,
+      "duration": 0.45,
+      "prompt": "il encaisse la tete en arriere"
+    },
+    {
+      "id": "encaisse2",
+      "actor": "Hero",
+      "at": 2.73,
+      "duration": 0.4,
+      "prompt": "il encaisse et titube"
+    },
+    {
+      "id": "contre",
+      "actor": "Hero",
+      "at": 3.13,
+      "duration": 0.6,
+      "prompt": "il attrape le bras et le retourne"
+    },
+    {
+      "id": "plaque",
+      "actor": "Hero",
+      "at": 3.73,
+      "duration": 0.55,
+      "prompt": "il le pousse des deux mains contre le mur"
+    },
+    {
+      "id": "desarme",
+      "actor": "Hero",
+      "at": 4.28,
+      "duration": 0.5,
+      "prompt": "il lui prend le couteau de la main"
+    },
+    {
+      "id": "arme",
+      "actor": "Hero",
+      "at": 4.78,
+      "duration": 0.45,
+      "prompt": "il arme son bras en arriere"
+    },
+    {
+      "id": "lance",
+      "actor": "Hero",
+      "at": 5.23,
+      "duration": 0.4,
+      "prompt": "il lance le couteau devant lui"
+    },
+    {
+      "id": "souffle",
+      "actor": "Hero",
+      "at": 5.63,
+      "duration": 1.82,
+      "prompt": "il reste immobile, essouffle"
+    }
+  ],
+  "shots": [
+    {
+      "id": "large",
+      "position": [
+        7,
+        4.5,
+        4
+      ],
+      "look_at": "Hero",
+      "fov": 55,
+      "drift": [
+        -0.4,
+        0,
+        -0.3
+      ]
+    },
+    {
+      "id": "mur",
+      "position": [
+        4,
+        3.6,
+        3
+      ],
+      "look_at": "Hero",
+      "fov": 38,
+      "blend": 0.15,
+      "drift": [
+        -0.2,
+        -0.1,
+        0
+      ]
+    },
+    {
+      "id": "hero_cu",
+      "position": [
+        2.2,
+        3.4,
+        2
+      ],
+      "look_at": "Hero",
+      "fov": 28,
+      "blend": 0.2
+    },
+    {
+      "id": "enemy_cu",
+      "position": [
+        3,
+        3.5,
+        3.2
+      ],
+      "look_at": "Enemy",
+      "fov": 30,
+      "blend": 0.2
+    },
+    {
+      "id": "couteau",
+      "position": [
+        2.6,
+        3.2,
+        2.4
+      ],
+      "look_at": "Enemy",
+      "fov": 24,
+      "blend": 0.1,
+      "drift": [
+        -0.15,
+        0,
+        0
+      ]
+    }
+  ],
+  "events": [
+    {
+      "kind": "camera",
+      "shot": "large",
+      "cue": "approche"
+    },
+    {
+      "kind": "camera",
+      "shot": "mur",
+      "cue": "saisit",
+      "offset": 0.1
+    },
+    {
+      "kind": "camera",
+      "shot": "hero_cu",
+      "cue": "frappe1",
+      "offset": 0.05
+    },
+    {
+      "kind": "camera",
+      "shot": "mur",
+      "cue": "contre"
+    },
+    {
+      "kind": "camera",
+      "shot": "enemy_cu",
+      "cue": "encastre",
+      "offset": 0.05
+    },
+    {
+      "kind": "camera",
+      "shot": "couteau",
+      "cue": "desarme",
+      "offset": 0.1
+    },
+    {
+      "kind": "camera",
+      "shot": "enemy_cu",
+      "cue": "lance",
+      "offset": 0.18
+    },
+    {
+      "kind": "camera",
+      "shot": "large",
+      "cue": "tombe",
+      "offset": 0.4
+    },
+    {
+      "kind": "prop",
+      "prop": "Couteau",
+      "action": "release",
+      "actor": "Enemy",
+      "cue": "desarme",
+      "offset": 0.2
+    },
+    {
+      "kind": "prop",
+      "prop": "Couteau",
+      "action": "attach",
+      "actor": "Hero",
+      "cue": "desarme",
+      "offset": 0.24
+    },
+    {
+      "kind": "prop",
+      "prop": "Couteau",
+      "action": "throw",
+      "actor": "Hero",
+      "cue": "lance",
+      "offset": 0.18,
+      "impulse": [
+        0,
+        2,
+        -60
+      ]
+    },
+    {
+      "kind": "face",
+      "expression": "angry",
+      "actor": "Enemy",
+      "cue": "saisit"
+    },
+    {
+      "kind": "face",
+      "expression": "pain",
+      "actor": "Hero",
+      "cue": "encaisse1",
+      "offset": 0.05
+    },
+    {
+      "kind": "face",
+      "expression": "determined",
+      "actor": "Hero",
+      "cue": "contre"
+    },
+    {
+      "kind": "face",
+      "expression": "surprised",
+      "actor": "Enemy",
+      "cue": "surpris"
+    },
+    {
+      "kind": "face",
+      "expression": "pain",
+      "actor": "Enemy",
+      "cue": "impact"
+    }
+  ]
+}
