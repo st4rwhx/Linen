@@ -217,3 +217,50 @@ def test_the_flattened_survey_still_reaches_its_print():
     flat = " ".join(SURVEY.split())
     assert flat.count("print(") == 3, "the three prints must still be there"
     assert flat.rstrip().endswith(f'print("{END}")')
+
+
+def test_a_name_shared_by_several_objects_is_flagged_not_silently_framed():
+    """Three parts called `Handle` in one place is ordinary.
+
+    The camera will frame one of them, and not necessarily the one that was
+    meant — so it says which one it took and where.
+    """
+    surveyed = dict(SURVEYED)
+    surveyed["landmarks"] = [
+        {"name": "Handle", "class": "MeshPart", "position": [-15, 5.5, -3.5], "size": [1, 1, 1]},
+        {"name": "Handle", "class": "MeshPart", "position": [-15, 4.1, -3.5], "size": [1, 1, 1]},
+    ]
+    scene = _scene()
+    scene.shots[1].look_at = "Handle"
+    notes = stage_in(scene, parse_place(json.dumps(surveyed)))
+    assert any("2 objets" in note and "Handle" in note for note in notes)
+
+
+def test_the_ground_and_the_plugin_junk_are_not_offered_as_camera_targets():
+    """Read off a real survey: a baseplate, terrain, a spawn and a Moon gizmo.
+
+    None of those is something a camera is pointed at, and they crowd out what
+    is — a place only reports sixty landmarks.
+    """
+    from linen.scene.place import SURVEY
+
+    for excluded in ("Terrain", "Baseplate", "SpawnLocation"):
+        assert f"{excluded} = true" in SURVEY, f"{excluded} must be filtered out"
+    assert "MAX_LANDMARK_STUDS" in SURVEY, "a 2048-stud baseplate is not a landmark"
+    assert "insideRig" in SURVEY, "a tool's Handle belongs to whoever holds it"
+
+
+def test_a_rig_is_read_at_its_root_not_at_the_model_pivot():
+    """The staging script positions a character by its HumanoidRootPart.
+
+    A Model's pivot is a different point — on a rig from the Rig Builder it
+    sits near the floor — so reading the pivot and staging to the root buries
+    the character a couple of studs into the ground. Seen on a real place:
+    a rig reported at y=0.13 whose root belongs at y=2.43.
+    """
+    from linen.scene.place import SURVEY
+
+    assert "HumanoidRootPart" in SURVEY
+    root = SURVEY.index('model:FindFirstChild("HumanoidRootPart")')
+    pivot = SURVEY.index("model:GetPivot()")
+    assert root < pivot, "the root is the first choice; the pivot is the fallback"

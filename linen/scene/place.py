@@ -78,14 +78,40 @@ local landmarks = {{}}
 local sounds = {{}}
 
 --[[ Anonymous scenery is not a landmark: a hundred parts called "Part" tell
-     you nothing, so only what someone bothered to name is kept. ]]
+     you nothing, so only what someone bothered to name is kept. Nor is the
+     ground, the terrain, or a plugin's gizmo — none of those is something a
+     camera is ever pointed at, and they crowd out what is. ]]
 local anonymous = {{ Part = true, Wedge = true, MeshPart = true, Union = true, Model = true }}
+local scenery = {{ Terrain = true, Baseplate = true, SpawnLocation = true }}
+local MAX_LANDMARK_STUDS = 200
+
+local function insideRig(thing: Instance): boolean
+	--[[ A tool's Handle sits inside the character, not beside it. It belongs to
+	     whoever is holding it, so it is not set dressing. ]]
+	local node = thing.Parent
+	while node and node ~= Workspace do
+		if node:FindFirstChildOfClass("Humanoid") then
+			return true
+		end
+		node = node.Parent
+	end
+	return false
+end
+
+local function tooBig(size: Vector3): boolean
+	return math.max(size.X, size.Y, size.Z) > MAX_LANDMARK_STUDS
+end
 
 for _, thing in Workspace:GetDescendants() do
 	if thing:IsA("Humanoid") then
 		local model = thing.Parent
 		if model and model:IsA("Model") then
-			local pivot = model:GetPivot()
+			--[[ The staging script positions a character by its HumanoidRootPart,
+			     so that is what has to be read back. A Model's pivot is not the
+			     same point: on a rig built by the Rig Builder it sits near the
+			     floor, and staging to it buries the character two studs deep. ]]
+			local root = model:FindFirstChild("HumanoidRootPart")
+			local pivot = (root and root:IsA("BasePart")) and root.CFrame or model:GetPivot()
 			local _, yaw = pivot:ToOrientation()
 			table.insert(rigs, {{
 				name = model.Name,
@@ -101,15 +127,16 @@ for _, thing in Workspace:GetDescendants() do
 			id = thing.SoundId,
 			parent = thing.Parent and thing.Parent.Name or "",
 		}})
-	elseif #landmarks < MAX_LANDMARKS and not anonymous[thing.Name] then
+	elseif #landmarks < MAX_LANDMARKS and not anonymous[thing.Name]
+		and not scenery[thing.Name] and not thing:IsA("Terrain") and not insideRig(thing) then
 		local position, size = nil, nil
-		if thing:IsA("BasePart") and thing.Parent and not thing.Parent:FindFirstChildOfClass("Humanoid") then
+		if thing:IsA("BasePart") then
 			position, size = thing.Position, thing.Size
 		elseif thing:IsA("Model") and thing.PrimaryPart and not thing:FindFirstChildOfClass("Humanoid") then
 			local box, extent = thing:GetBoundingBox()
 			position, size = box.Position, extent
 		end
-		if position and size then
+		if position and size and not tooBig(size) then
 			table.insert(landmarks, {{
 				name = thing.Name,
 				class = thing.ClassName,
@@ -305,9 +332,23 @@ def stage_in(scene, place: Place) -> list[str]:
 
     known = place.names | {actor.name for actor in scene.actors}
     for shot in scene.shots:
-        if shot.look_at and shot.look_at not in known:
+        if not shot.look_at:
+            continue
+        if shot.look_at not in known:
             notes.append(
                 f"plan {shot.id}: vise {shot.look_at!r}, qui n'existe ni dans la "
                 f"place ni dans le casting — le cadrage sera faux"
+            )
+            continue
+        # Several parts may share a name — three `Handle`s in one place is
+        # normal. The camera will frame one of them, and not necessarily the
+        # one that was meant.
+        same = [p for p in place.landmarks if p.name == shot.look_at]
+        if len(same) > 1:
+            notes.append(
+                f"plan {shot.id}: {len(same)} objets s'appellent {shot.look_at!r} "
+                f"dans la place — le cadrage prendra le premier, a "
+                f"({same[0].position[0]:g}, {same[0].position[1]:g}, "
+                f"{same[0].position[2]:g}). Renomme-les si ce n'est pas celui-la."
             )
     return notes

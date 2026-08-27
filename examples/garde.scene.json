@@ -1,0 +1,93 @@
+{
+  "name": "Garde",
+  "fps": 30,
+  "actors": [
+    {
+      "name": "Rig",
+      "rig": "R15",
+      "position": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "cues": [
+    {
+      "id": "attente",
+      "actor": "Rig",
+      "at": 0.0,
+      "prompt": "reste immobile",
+      "duration": 1.6
+    },
+    {
+      "id": "alerte",
+      "actor": "Rig",
+      "after": "attente",
+      "prompt": "regarde autour de lui",
+      "duration": 1.2
+    },
+    {
+      "id": "avance",
+      "actor": "Rig",
+      "after": "alerte",
+      "prompt": "marche",
+      "duration": 1.8
+    },
+    {
+      "id": "arret",
+      "actor": "Rig",
+      "after": "avance",
+      "prompt": "reste immobile",
+      "duration": 1.0
+    }
+  ],
+  "shots": [
+    {
+      "id": "large",
+      "position": [
+        -9,
+        4.5,
+        2
+      ],
+      "look_at": "Rig",
+      "fov": 55,
+      "drift": [
+        -0.3,
+        0,
+        -0.2
+      ]
+    },
+    {
+      "id": "serre",
+      "position": [
+        -13,
+        3.4,
+        0.5
+      ],
+      "look_at": "Rig",
+      "fov": 32,
+      "blend": 0.3
+    }
+  ],
+  "events": [
+    {
+      "kind": "camera",
+      "shot": "large",
+      "cue": "attente",
+      "offset": 0.0
+    },
+    {
+      "kind": "camera",
+      "shot": "serre",
+      "cue": "alerte",
+      "offset": 0.1
+    },
+    {
+      "kind": "camera",
+      "shot": "large",
+      "cue": "avance",
+      "offset": 0.0
+    }
+  ]
+}
