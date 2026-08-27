@@ -148,6 +148,13 @@ crée des copies. Et c'est le pire des trois résultats possibles, parce qu'il
 ne pointe. Avec le manifeste, la deuxième exécution fait un `PATCH` sur le même
 asset : tous les `Animation` déjà câblés dans ton jeu suivent tout seuls.
 
+Il est réécrit **après chaque fichier**, pas à la fin. Un asset qui existe et
+qui n'est pas noté est pire qu'un asset qui n'existe pas : la fois suivante ne
+peut pas le savoir, donc elle en crée un deuxième et le jeu continue de pointer
+sur le premier. Une coupure de réseau doit coûter **le fichier en cours**, pas
+tout ce qui précède. Si le programme s'arrête quand même, il sauve le manifeste
+avant de partir et te le dit.
+
 Commite `publish.json`. Ce n'est pas un secret, c'est la carte de ton jeu.
 
 ---

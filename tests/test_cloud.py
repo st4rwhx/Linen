@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import email.parser
 import json
+import ssl
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -78,6 +79,10 @@ class _Api(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         self._record()
+        if type(self).behaviour == "hang-up-once":
+            type(self).behaviour = "operation"
+            self.close_connection = True
+            return  # answer nothing at all: the socket just goes away
         if type(self).behaviour == "rate-limited-once":
             type(self).behaviour = "operation"
             return self._answer(429, {"message": "Too many requests"})
@@ -368,3 +373,70 @@ def test_a_path_that_does_not_exist_blames_the_working_directory(tmp_path, monke
     errors = capsys.readouterr().err
     assert str(tmp_path) in errors, "it has to say where you actually are"
     assert "cd " in errors
+
+
+def test_the_manifest_survives_a_crash_halfway_through(api, tmp_path, monkeypatch, capsys):
+    """Sixteen good uploads once ended with nothing written down.
+
+    An asset that exists and is not in the manifest is worse than one that
+    does not exist: the next run cannot know it is there, so it creates a
+    second copy, and the game goes on pointing at the first.
+    """
+    import linen.cloud
+    from linen.cli import main
+
+    base, _ = api
+    monkeypatch.setattr(linen.cloud, "BASE_URL", base)
+    monkeypatch.setattr(linen.cloud, "POLL_SECONDS", 0)
+    monkeypatch.setenv("ROBLOX_API_KEY", KEY)
+
+    folder = tmp_path / "out"
+    folder.mkdir()
+    for name in ("A", "B", "C"):
+        (folder / f"{name}.rbxmx").write_text("<roblox/>")
+    manifest = tmp_path / "publish.json"
+
+    real = linen.cloud.publish
+    calls = {"n": 0}
+
+    def blow_up_on_the_third(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise ssl.SSLError("read operation timed out")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(linen.cloud, "publish", blow_up_on_the_third)
+
+    with pytest.raises(ssl.SSLError):
+        main(["publish", str(folder), "--creator", "user:1", "--manifest", str(manifest)])
+
+    kept = load_manifest(manifest)
+    assert set(kept) == {"A.rbxmx", "B.rbxmx"}, "what did upload has to be written down"
+    assert "manifeste sauve" in capsys.readouterr().err
+
+
+def test_a_dropped_connection_is_retried_rather_than_raised_as_a_traceback(api, animation):
+    """urllib raises a reset bare, so it used to escape as a stack trace."""
+    base, recorder = api
+    recorder.behaviour = "hang-up-once"
+    result = publish(
+        animation,
+        Creator.parse("user:42"),
+        key=KEY,
+        base_url=base,
+        poll_seconds=0,
+        retry_seconds=0,
+    )
+    assert result.asset_id == "2205400862"
+
+
+def test_a_host_that_never_answers_says_so_instead_of_crashing(animation):
+    with pytest.raises(PublishError, match="could not reach"):
+        publish(
+            animation,
+            Creator.parse("user:42"),
+            key=KEY,
+            base_url="http://127.0.0.1:1/assets/v1",
+            poll_seconds=0,
+            retry_seconds=0,
+        )

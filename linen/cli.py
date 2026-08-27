@@ -355,23 +355,39 @@ def _cmd_publish(args) -> int:
 
     done: dict[str, str] = dict(known)
     failed: list[tuple[str, str]] = []
-    for source in sources:
-        try:
-            result = publish(
-                source,
-                creator,
-                description=args.description,
-                asset_id=known.get(source.name),
-                asset_type=args.asset_type,
+    try:
+        for source in sources:
+            try:
+                result = publish(
+                    source,
+                    creator,
+                    description=args.description,
+                    asset_id=known.get(source.name),
+                    asset_type=args.asset_type,
+                )
+            except PublishError as exc:
+                failed.append((source.name, str(exc)))
+                continue
+            done[source.name] = result.asset_id
+            print(f"  {result.line()}")
+            # Written after every single upload, not at the end. An asset that
+            # exists and is not written down is worse than one that does not
+            # exist: the next run cannot know, so it creates a second copy and
+            # the game keeps pointing at the first. One interrupted batch must
+            # cost the file it was on, not everything before it.
+            if args.manifest:
+                save_manifest(args.manifest, done, creator)
+    except (KeyboardInterrupt, Exception):
+        if args.manifest and done != known:
+            save_manifest(args.manifest, done, creator)
+            print(
+                f"manifeste sauve dans {args.manifest} avant de s'arreter — "
+                f"{len(done) - len(known)} identifiants gardes",
+                file=sys.stderr,
             )
-        except PublishError as exc:
-            failed.append((source.name, str(exc)))
-            continue
-        done[source.name] = result.asset_id
-        print(f"  {result.line()}")
+        raise
 
     if args.manifest and done != known:
-        save_manifest(args.manifest, done, creator)
         print(f"manifeste ecrit dans {args.manifest}")
 
     print(f"{len(done) - len(known)} publiees, {len(sources) - len(failed)} traitees")

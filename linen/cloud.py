@@ -61,6 +61,10 @@ POLL_ATTEMPTS = 40
 RETRY_ATTEMPTS = 4
 RETRY_SECONDS = 4.0
 
+#: A connection that hangs forever costs the whole batch. Uploads are up to
+#: 20 MB, so this is generous rather than tight.
+TIMEOUT_SECONDS = 120.0
+
 
 class PublishError(RuntimeError):
     """A publish that did not happen, said in terms of what to do about it."""
@@ -253,7 +257,7 @@ def _call(
     for attempt in range(RETRY_ATTEMPTS):
         request = urllib.request.Request(url, data=body, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(request) as answer:
+            with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as answer:
                 return json.loads(answer.read() or b"{}")
         except urllib.error.HTTPError as exc:
             # 429 is the rate limiter and 5xx is Roblox having a moment. Both
@@ -264,10 +268,23 @@ def _call(
                 raise PublishError(_explain(exc, key)) from None
             time.sleep(_retry_after(exc, wait))
             wait *= 2
-        except urllib.error.URLError as exc:
-            raise PublishError(f"could not reach {url}: {_redact(str(exc.reason), key)}") from None
         except json.JSONDecodeError as exc:
             raise PublishError(f"{url} answered something that is not JSON: {exc}") from None
+        except OSError as exc:
+            # A reset connection, a dropped TLS read, a timeout. `URLError`,
+            # `ssl.SSLError` and `TimeoutError` are all `OSError`, and urllib
+            # lets the last two through bare — so catching only `URLError`
+            # meant a dropped read came out as a traceback in the middle of a
+            # batch, which is how sixteen good uploads once ended with nothing
+            # written down.
+            reason = getattr(exc, "reason", exc)
+            if attempt == RETRY_ATTEMPTS - 1:
+                raise PublishError(
+                    f"could not reach {url}: {_redact(str(reason), key)}. Tried "
+                    f"{RETRY_ATTEMPTS} times."
+                ) from None
+            time.sleep(wait)
+            wait *= 2
     raise PublishError(f"{url}: gave up after {RETRY_ATTEMPTS} attempts")
 
 
