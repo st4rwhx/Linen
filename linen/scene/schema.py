@@ -88,6 +88,20 @@ class Cue:
     duration: float | None = None
     fit: str = "auto"
     loop: bool = False
+    #: Where the actor ends up. A Roblox animation is in place by convention —
+    #: the root is nailed — so a capture of someone walking forward plays as
+    #: walking on the spot. Moving the character is a separate thing, and this
+    #: is it: the model travels here over the cue's length while the animation
+    #: runs.
+    #:
+    #: Either three studs, or **the name of another actor**, which is what you
+    #: almost always mean. "Walk to Hero" survives being restaged into a real
+    #: place; "walk to z=-4" does not, and comes out as a march into the
+    #: scenery the moment the stage moves.
+    move_to: Vec3 | str | None = None
+    #: How far to stop short, in studs, when `move_to` names someone. Bodies
+    #: do not occupy the same point.
+    stop_at: float = 1.5
 
     def validate(self, cast: set[str]) -> None:
         if self.actor not in cast:
@@ -106,6 +120,17 @@ class Cue:
             )
         if self.duration is not None and self.duration <= 0:
             raise SceneError(f"cue {self.id!r}: duration must be positive")
+        if isinstance(self.move_to, str):
+            if self.move_to not in cast:
+                raise SceneError(
+                    f"cue {self.id!r} walks to {self.move_to!r}, who is not in the cast"
+                )
+            if self.move_to == self.actor:
+                raise SceneError(f"cue {self.id!r}: {self.actor} cannot walk to themselves")
+            if self.stop_at < 0:
+                raise SceneError(f"cue {self.id!r}: stop_at cannot be negative")
+        elif self.move_to is not None and len(self.move_to) != 3:
+            raise SceneError(f"cue {self.id!r}: move_to needs three numbers, or a name")
 
 
 @dataclass
@@ -203,7 +228,10 @@ class Scene:
 
         try:
             actors = [Actor(**_tuple_position(a)) for a in data.get("actors", [])]
-            cues = [Cue(**_rename_with(c)) for c in data.get("cues", [])]
+            cues = [
+                Cue(**_maybe_vector(_rename_with(c), "move_to"))
+                for c in data.get("cues", [])
+            ]
             props = [Prop(**_tuple_field(p, "grip")) for p in data.get("props", [])]
             shots = [Shot(**_tuple_field(s, "position", "drift", "follow_offset")) for s in data.get("shots", [])]
             events = [event_from_dict(e) for e in data.get("events", [])]
@@ -270,6 +298,13 @@ def _plain(item: Any) -> dict[str, Any]:
             continue
         out[spec.name.rstrip("_")] = list(value) if isinstance(value, tuple) else value
     return out
+
+
+def _maybe_vector(data: dict[str, Any], key: str) -> dict[str, Any]:
+    """A field that is either three numbers or a name, left alone if a name."""
+    if isinstance(data.get(key), (list, tuple)):
+        return _tuple_field(data, key)
+    return data
 
 
 def _tuple_field(data: dict[str, Any], *keys: str) -> dict[str, Any]:

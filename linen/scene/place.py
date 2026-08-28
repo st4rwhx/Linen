@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 Vec3 = tuple[float, float, float]
 
 BEGIN = "--LINEN-PLACE-BEGIN--"
@@ -330,6 +332,20 @@ def stage_in(scene, place: Place) -> list[str]:
                 f"ecrite dans la scene est gardee"
             )
             continue
+        # Everything this actor was told to walk to was written against where
+        # the scene put them. The place has just moved them, so the same shift
+        # applies to their destinations — otherwise an approach written as
+        # "cross four studs" becomes "teleport back to the old stage".
+        # Horizontally only. The vertical difference between a scene's stage
+        # and a real rig is standing height, not a move — adding it to a
+        # destination lifts the character off the ground for the whole walk.
+        shift = np.asarray(found.position, dtype=float) - np.asarray(
+            actor.position, dtype=float
+        )
+        shift[1] = 0.0
+        for cue in scene.cues_for(actor.name):
+            if isinstance(cue.move_to, (list, tuple)):
+                cue.move_to = tuple(np.asarray(cue.move_to, dtype=float) + shift)
         actor.position = found.position
         # Facing another actor is a relationship and survives being moved, so
         # it is left alone; a written yaw is replaced by the rig's real one.

@@ -266,3 +266,111 @@ def test_the_render_loop_is_torn_down_when_the_scene_ends(tmp_path):
     script = _script(_with_shot(), tmp_path)
     assert "UnbindFromRenderStep" in script
     assert "releaseCamera()" in script
+
+
+# --- travelling across the scene --------------------------------------------
+
+
+def _walk(**cue):
+    base = {"id": "go", "actor": "Hero", "at": 0.0, "prompt": "marche", "duration": 1.5}
+    base.update(cue)
+    return Scene.from_dict(
+        {
+            "name": "Trajet",
+            "actors": [
+                {"name": "Hero", "rig": "R15", "position": [0, 2.44, 0]},
+                {"name": "Enemy", "rig": "R15", "position": [0, 2.44, -10]},
+            ],
+            "cues": [base, {"id": "wait", "actor": "Enemy", "at": 0.0, "prompt": "il reste immobile"}],
+        }
+    )
+
+
+def test_an_actor_who_walks_actually_crosses_the_scene():
+    """A Roblox animation is in place — the root is nailed — so a capture of
+    someone walking forward plays as walking on the spot. Travelling is the
+    model moving, and without it a cinematic is people marching nowhere."""
+    built = build_scene(_walk(move_to=[0, 2.44, -8]), planner="offline")
+    assert len(built.moves) == 1
+    actor, start, stop, origin, goal = built.moves[0]
+    assert actor == "Hero" and origin[2] == 0.0 and goal[2] == -8.0
+    assert stop > start
+
+
+def test_walking_to_someone_stops_short_of_them():
+    """Bodies do not occupy the same point."""
+    built = build_scene(_walk(move_to="Enemy", stop_at=2.0), planner="offline")
+    _, _, _, _, goal = built.moves[0]
+    assert goal[2] == pytest.approx(-8.0), "ten studs away, stopping two short"
+
+
+def test_a_destination_that_is_a_person_survives_being_restaged():
+    """"Walk to Hero" stays true wherever the stage ends up.
+
+    An absolute coordinate does not: restage the scene into a real place and
+    it becomes a march into the scenery.
+    """
+    import json
+
+    from linen.scene.place import parse_place, stage_in
+
+    place = {
+        "place": "P", "placeId": 1,
+        "rigs": [
+            {"name": "Hero", "rig": "R15", "position": [40, 2.44, 20], "yaw": 0},
+            {"name": "Enemy", "rig": "R15", "position": [40, 2.44, 10], "yaw": 180},
+        ],
+        "landmarks": [], "sounds": [],
+    }
+    scene = _walk(move_to="Enemy", stop_at=2.0)
+    stage_in(scene, parse_place(json.dumps(place)))
+    _, _, _, origin, goal = build_scene(scene, planner="offline").moves[0]
+    assert origin == pytest.approx((40.0, 2.44, 20.0))
+    assert goal == pytest.approx((40.0, 2.44, 12.0)), "still two studs short of Enemy"
+
+
+def test_walking_never_changes_how_tall_someone_is():
+    """A written Y that disagrees is almost always a copied coordinate, and
+    honouring it sends the character gliding through the air."""
+    built = build_scene(_walk(move_to=[0, 99.0, -8]), planner="offline")
+    _, _, _, origin, goal = built.moves[0]
+    assert goal[1] == origin[1] == 2.44
+
+
+def test_carrying_someone_faster_than_their_feet_is_reported():
+    """The same footskate the polish pass measures inside a clip, one level up.
+
+    Reported rather than corrected: which of the two is wrong — the distance
+    or the cue's length — is the author's call.
+    """
+    fast = build_scene(_walk(move_to=[0, 2.44, -30]), planner="offline")
+    assert fast.skates, "thirty studs in a second and a half is a glide"
+    cue, actor, carried, stepping = fast.skates[0]
+    assert cue == "go" and actor == "Hero"
+    assert carried > stepping * 2
+
+
+def test_a_speed_that_matches_the_feet_is_not_reported():
+    """A check that fires on everything is a check that says nothing."""
+    quiet = None
+    for distance in (6.0, 7.0, 8.0, 9.0):
+        built = build_scene(_walk(move_to=[0, 2.44, -distance]), planner="offline")
+        if not built.skates:
+            quiet = distance
+            break
+    assert quiet is not None, "no walking distance at all was judged acceptable"
+
+
+def test_walking_to_someone_who_is_not_in_the_cast_says_so():
+    with pytest.raises(SceneError, match="not in the cast"):
+        _walk(move_to="Personne").validate()
+
+
+def test_the_travel_reaches_the_script(tmp_path):
+    from linen.scene import write_scene_script
+
+    built = build_scene(_walk(move_to=[0, 2.44, -8]), planner="offline")
+    script = write_scene_script(built, tmp_path / "S.client.luau").read_text()
+    assert "local MOVES" in script
+    assert "driveMoves" in script
+    assert "PivotTo" in script, "the model has to be carried; the clip cannot"

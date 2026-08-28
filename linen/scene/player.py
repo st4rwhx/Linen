@@ -298,6 +298,28 @@ end
 --[[ Between two keys on the same control, eased rather than stepped. The keys
      were generated with their own approach times, so a plain smoothstep here
      is enough — the shaping is in where the keys are, not in this curve. ]]
+--[[ Carry the actors. The animation is in place — Roblox nails the root — so
+     a character that crosses the scene is the model being moved, eased at the
+     ends so a walk starts and stops instead of jerking into motion. The
+     character keeps facing the way it travels. ]]
+local function driveMoves(elapsed: number)
+\tfor _, move in MOVES do
+\t\tlocal model = models[move.actor]
+\t\tif model == nil or elapsed < move.start then
+\t\t\tcontinue
+\t\tend
+\t\tlocal span = math.max(move.stop - move.start, 1e-3)
+\t\tlocal t = math.clamp((elapsed - move.start) / span, 0, 1)
+\t\tlocal where = move.from:Lerp(move.to, t * t * (3 - 2 * t))
+\t\tlocal heading = move.to - move.from
+\t\tif heading.Magnitude > 0.1 then
+\t\t\tmodel:PivotTo(CFrame.lookAt(where, where + Vector3.new(heading.X, 0, heading.Z)))
+\t\telse
+\t\t\tmodel:PivotTo(CFrame.new(where) * (model:GetPivot() - model:GetPivot().Position))
+\t\tend
+\tend
+end
+
 local function driveFaces(elapsed: number)
 \tfor actorName, keys in FACES do
 \t\tlocal controls = findFace(actorName)
@@ -596,6 +618,7 @@ task.spawn(function()
 \tlocal next_ = 1
 \twhile next_ <= #DIRECTOR do
 \t\telapsed += RunService.Heartbeat:Wait()
+\t\tdriveMoves(elapsed)
 \t\tdriveFaces(elapsed)
 \t\twhile next_ <= #DIRECTOR and DIRECTOR[next_].at <= elapsed do
 \t\t\tlocal cue = DIRECTOR[next_]

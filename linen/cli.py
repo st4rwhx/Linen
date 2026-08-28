@@ -1005,6 +1005,16 @@ def _cmd_scene(args) -> int:
 
             write_preview(clip, args.out / f"{scene.name}_{actor_name}.json")
 
+    if built.moves:
+        print(f"  {len(built.moves)} deplacements d'acteur")
+    for cue_id, actor, carried, stepping in built.skates:
+        print(
+            f"    {cue_id}: {actor} est porte a {carried:.1f} studs/s mais ses "
+            f"pieds en font {stepping:.1f} — il glisse. Change la distance ou "
+            f"la duree du cue.",
+            file=sys.stderr,
+        )
+
     if built.reaches:
         print(f"  {len(built.reaches)} contacts resolus dans l'animation :")
         for reach in built.reaches:

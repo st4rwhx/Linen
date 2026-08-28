@@ -62,6 +62,12 @@ class BuiltScene:
     director: list[tuple[float, object]] = field(default_factory=list)
     #: actor -> the generated facial performance, as FACS keys.
     faces: dict = field(default_factory=dict)
+    #: Where each actor is, over time: (actor, start, stop, from, to). A Roblox
+    #: animation is in place, so travelling across the scene is this, not the
+    #: clip.
+    moves: list = field(default_factory=list)
+    #: Cues whose travel disagrees with what the capture's feet are doing.
+    skates: list = field(default_factory=list)
     #: What each contact actually achieved, in studs. A reach that fell short
     #: is reported rather than absorbed: an arm has a fixed length.
     reaches: list = field(default_factory=list)
@@ -93,6 +99,7 @@ def build_scene(
 
     total = max((entry.end for entry in schedule), default=0.0)
     faces = build_faces(scene, schedule, total)
+    moves, skates = _plan_moves(scene, schedule, clips)
     return BuiltScene(
         scene=scene,
         clips=clips,
@@ -101,7 +108,116 @@ def build_scene(
         director=director,
         reaches=reaches,
         faces=faces,
+        moves=moves,
+        skates=skates,
     )
+
+
+#: How far a travel speed may disagree with what the feet are doing before it
+#: is worth saying. Below this nobody sees it; above it, the character glides.
+SKATE_TOLERANCE = 0.35
+
+
+def _plan_moves(scene: Scene, schedule: list[ScheduledCue], clips):
+    """Where every actor is over time, and where that fights the animation.
+
+    A Roblox animation is in place by convention — the root is nailed — so a
+    capture of someone walking forward plays as walking on the spot. Crossing
+    the scene is the model moving, which is a separate thing and belongs to the
+    script rather than the clip.
+
+    The check that matters is speed. If a character is carried four studs in a
+    second while its feet are stepping at one stud per second, it glides — the
+    same footskate the polish pass measures inside a clip, one level up. It is
+    reported in studs per second rather than corrected, because which of the
+    two is wrong is the author's call: the distance, or the cue's length.
+    """
+    from ..rigs.kinematics import place_rotations
+
+    moves, skates = [], []
+    where = {actor.name: np.asarray(actor.position, dtype=float) for actor in scene.actors}
+
+    for entry in sorted(schedule, key=lambda e: e.start):
+        if entry.cue.move_to is None:
+            continue
+        actor = entry.cue.actor
+        start = where[actor]
+        target = entry.cue.move_to
+        if isinstance(target, str):
+            # Stop short of them, along the line between the two. A destination
+            # that is a person is a relationship, and it stays true wherever
+            # the stage ends up.
+            them = where[target]
+            offset = them - start
+            offset[1] = 0.0
+            distance = float(np.linalg.norm(offset))
+            goal = (
+                them - offset / distance * entry.cue.stop_at
+                if distance > 1e-6
+                else np.array(start, dtype=float)
+            )
+        else:
+            goal = np.asarray(target, dtype=float)
+        # A destination is a place on the floor. Walking does not change how
+        # tall someone is, so the height is the actor's own — a written Y that
+        # disagrees is almost always a copied coordinate, and honouring it
+        # sends the character gliding through the air.
+        goal[1] = start[1]
+        span = max(entry.end - entry.start, 1e-3)
+        travelled = float(np.linalg.norm(goal - start))
+        moves.append((actor, entry.start, entry.end, tuple(start), tuple(goal)))
+        where[actor] = goal
+
+        clip = clips.get(actor)
+        if clip is None or travelled < 1e-6:
+            continue
+        stepping = _foot_speed(clip, entry, place_rotations)
+        carried = travelled / span
+        if stepping > 1e-6 and abs(carried - stepping) / max(stepping, carried) > SKATE_TOLERANCE:
+            skates.append((entry.cue.id, actor, carried, stepping))
+    return moves, skates
+
+
+def _foot_speed(clip, entry: ScheduledCue, place_rotations) -> float:
+    """The speed the body is asking to travel at, from the foot on the ground.
+
+    Under a nailed root a planted foot slides backwards at exactly the speed
+    the character is moving forwards — that is the whole idea behind the
+    footskate measurement this project already does inside a clip. So the
+    speed is read from the *lowest* foot each frame, which is the one in
+    contact, and taken as a median so a swing passing low does not set it.
+
+    Averaging both feet instead gives a number that is half swing, and it
+    comes out roughly the same whatever the clip is doing — a check that fires
+    on everything, which is a check that says nothing.
+    """
+    feet = [p for p in clip.rig.animated_parts if p.endswith(("Foot", "Leg"))]
+    low = max(round(entry.start * clip.fps), 0)
+    high = min(round(entry.end * clip.fps), clip.frame_count - 1)
+    if not feet or high - low < 3:
+        return 0.0
+
+    grounded = []
+    for frame in range(low, high + 1):
+        pose = {name: track[frame] for name, track in clip.rotations.items()}
+        placed = place_rotations(clip.rig, pose)
+        here = {part: placed[part][0] for part in feet}
+        grounded.append(min(here, key=lambda part: here[part][1]))
+
+    speeds = []
+    for index in range(1, len(grounded)):
+        if grounded[index] != grounded[index - 1]:
+            continue  # the contact changed feet; that step is not a speed
+        part = grounded[index]
+        frame = low + index
+        before = place_rotations(
+            clip.rig, {n: track[frame - 1] for n, track in clip.rotations.items()}
+        )[part][0]
+        after = place_rotations(
+            clip.rig, {n: track[frame] for n, track in clip.rotations.items()}
+        )[part][0]
+        speeds.append(float(np.linalg.norm((after - before)[[0, 2]])) * clip.fps)
+    return float(np.median(speeds)) if speeds else 0.0
 
 
 def _actor_yaw(scene: Scene, actor) -> float:

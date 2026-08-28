@@ -33,7 +33,9 @@
       "actor": "Enemy",
       "at": 0.0,
       "duration": 0.9,
-      "prompt": "il avance vite sur lui"
+      "prompt": "il avance vite sur lui",
+      "move_to": "Hero",
+      "stop_at": 1.4
     },
     {
       "id": "saisit",

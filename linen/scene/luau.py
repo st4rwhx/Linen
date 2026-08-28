@@ -95,6 +95,22 @@ def scene_script(
         lines.append("\t},")
     lines.append("}")
     lines.append("")
+    # Where each actor travels. A Roblox animation is in place, so crossing the
+    # scene is the model moving — the clip never carries the character.
+    lines.append(
+        "local MOVES: { { actor: string, start: number, stop: number, "
+        "from: Vector3, to: Vector3 } } = {"
+    )
+    for actor, start, stop, origin, goal in getattr(built, "moves", []):
+        ox, oy, oz = origin
+        gx, gy, gz = goal
+        lines.append(
+            f'\t{{ actor = "{_escape(actor)}", start = {start:.3f}, stop = {stop:.3f}, '
+            f"from = Vector3.new({ox:g}, {oy:g}, {oz:g}), "
+            f"to = Vector3.new({gx:g}, {gy:g}, {gz:g}) }},"
+        )
+    lines.append("}")
+    lines.append("")
     lines.append("-- Cue sheet, for reference when retiming by hand.")
     lines.append(
         "local CUES: { { id: string, actor: string, start: number, stop: number, "
