@@ -437,3 +437,29 @@ def test_a_broken_target_names_the_cue_it_came_from(monkeypatch):
     monkeypatch.setattr(contact_module, "solve_reach", refuse)
     with pytest.raises(SceneError, match="contact on cue 'push'"):
         build_scene(_fight(), planner="offline")
+
+
+def test_a_camera_aimed_at_a_name_nothing_answers_to_says_so(tmp_path):
+    """It fell through to `Vector3.zero` — the world origin.
+
+    The camera framed a point the cast is almost never standing on, or orbited
+    it, and the scene played with the actors off screen. Nothing said why,
+    which is the whole failure: a misspelt landmark costs an evening because
+    it does not look like a mistake.
+    """
+    script = _script(_with_shot(look_at="Fantome"), tmp_path)
+    assert "Vector3.zero" not in script.split("local function poseFor")[1].split("end")[0]
+    assert "n'existe pas dans" in script, "the missing name has to be named"
+    assert "fallbackFocus" in script, "and it has to frame the cast, not the origin"
+
+
+def test_the_camera_does_not_search_the_whole_workspace_every_frame(tmp_path):
+    """`FindFirstChild(name, true)` is recursive over everything in the place.
+
+    Sixty times a second, in a game of any size, for a subject that does not
+    move between parents. It is looked up once and remembered.
+    """
+    script = _script(_with_shot(), tmp_path)
+    body = script.split("local function subjectOf")[1].split("\nend")[0]
+    assert "shotSubjects[shot.id]" in body, "the lookup has to be cached"
+    assert "known.Parent ~= nil" in body, "and dropped if the subject is destroyed"

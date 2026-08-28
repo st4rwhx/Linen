@@ -429,10 +429,34 @@ local activeShot = nil
 local shotStartedAt = 0
 local shotOrigin = nil
 
+--[[ Whatever the shot is pointed at, looked up once and then remembered.
+
+     Two reasons it is not a plain search every frame. A recursive
+     FindFirstChild over the whole workspace, sixty times a second, is real
+     work in a place of any size. And a name nothing answers to used to fall
+     through to Vector3.zero — the camera framed the world origin, or orbited
+     it, while the cast stood somewhere else entirely. It played, it was
+     wrong, and nothing said why. ]]
+local shotSubjects: { [string]: PVInstance } = {}
+local shotMissing: { [string]: boolean } = {}
+
 local function subjectOf(shot): Vector3?
-\tlocal found = workspace:FindFirstChild(shot.lookAt, true)
+\tlocal known = shotSubjects[shot.id]
+\tif known ~= nil and known.Parent ~= nil then
+\t\treturn known:GetPivot().Position
+\tend
+\tlocal model = models[shot.lookAt]
+\tlocal found = model or workspace:FindFirstChild(shot.lookAt, true)
 \tif found and found:IsA("PVInstance") then
+\t\tshotSubjects[shot.id] = found
 \t\treturn found:GetPivot().Position
+\tend
+\tif not shotMissing[shot.id] then
+\t\tshotMissing[shot.id] = true
+\t\twarn(
+\t\t\t`Linen: le plan "{shot.id}" vise "{shot.lookAt}", qui n'existe pas dans `
+\t\t\t\t.. `cette place — la camera se rabat sur le premier acteur`
+\t\t)
 \tend
 \treturn nil
 end
@@ -454,8 +478,21 @@ end
 --[[ Where the camera should be, this instant. Driven every frame rather than
      tweened to a fixed CFrame, because an orbit and a follow both depend on
      where the subject is *now* — and a subject in a fight does not stay put. ]]
+--[[ Something to frame when the shot's subject cannot be found. The world
+     origin is almost never where the scene is, so the cast is a better guess
+     than nothing — and the warning above has already said which name failed. ]]
+local function fallbackFocus(): Vector3
+\tfor _, entry in STAGE do
+\t\tlocal model = models[entry.name]
+\t\tif model ~= nil then
+\t\t\treturn model:GetPivot().Position
+\t\tend
+\tend
+\treturn Vector3.zero
+end
+
 local function poseFor(shot, elapsed: number): CFrame
-\tlocal focus = subjectOf(shot) or Vector3.zero
+\tlocal focus = subjectOf(shot) or fallbackFocus()
 
 \tif shot.kind == "orbit" then
 \t\tlocal flat = Vector3.new(shot.position.X - focus.X, 0, shot.position.Z - focus.Z)
