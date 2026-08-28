@@ -544,7 +544,7 @@ def _player_source(tmp_path) -> str:
 
     scene = Scene.from_dict(json.loads(Path("examples/disarm.scene.json").read_text()))
     built = build_scene(scene, planner="offline", seed=0)
-    return write_scene_script(built, tmp_path / "Scene.server.luau").read_text()
+    return write_scene_script(built, tmp_path / "Scene.client.luau").read_text()
 
 
 def test_the_actor_lookup_admits_a_missing_actor(tmp_path):
@@ -566,3 +566,43 @@ def test_a_camera_target_is_checked_for_having_a_pivot(tmp_path):
     """
     source = _player_source(tmp_path)
     assert 'found:IsA("PVInstance")' in source
+
+
+def test_saving_a_scene_keeps_the_camera_the_props_and_the_events():
+    """`--save-scene` used to write a file missing most of the scene.
+
+    Shots, props and events were dropped, so reading the saved file back gave
+    a scene that built cleanly and was not the one that had been written — no
+    camera, no knife, no sound.
+    """
+    import json
+
+    from linen.scene import Scene
+
+    written = {
+        "name": "Tour",
+        "actors": [
+            {"name": "Hero", "rig": "R15"},
+            {"name": "Enemy", "rig": "R15", "position": [0, 0, -2]},
+        ],
+        "cues": [
+            {"id": "beat", "actor": "Hero", "at": 0.0, "prompt": "coup de poing"},
+            {"id": "take", "actor": "Enemy", "at": 0.0, "prompt": "il encaisse"},
+        ],
+        "props": [{"name": "Couteau", "source": "ReplicatedStorage.Couteau", "held_by": "Enemy"}],
+        "shots": [
+            {"id": "tour", "position": [6, 4, 4], "look_at": "Hero", "kind": "orbit",
+             "orbit_speed": 30.0, "fov": 40.0}
+        ],
+        "events": [
+            {"kind": "camera", "shot": "tour", "cue": "beat"},
+            {"kind": "face", "actor": "Hero", "cue": "beat", "expression": "angry"},
+        ],
+    }
+    again = Scene.from_dict(json.loads(json.dumps(Scene.from_dict(written).to_dict())))
+
+    assert [s.id for s in again.shots] == ["tour"]
+    assert again.shots[0].kind == "orbit" and again.shots[0].orbit_speed == 30.0
+    assert [p.name for p in again.props] == ["Couteau"]
+    assert {e.kind for e in again.events} == {"camera", "face"}
+    again.validate()

@@ -1031,7 +1031,7 @@ def _cmd_scene(args) -> int:
 
     script = write_scene_script(
         built,
-        args.out / f"{scene.name}.server.luau",
+        args.out / f"{scene.name}.client.luau",
         folder=args.folder,
         sheet=sheet,
         mapping=mapping,

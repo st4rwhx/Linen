@@ -64,6 +64,9 @@ EXPRESSIONS: tuple[str, ...] = (
 
 PROP_ACTIONS: tuple[str, ...] = ("attach", "release", "throw")
 
+#: How a camera behaves for the length of a shot.
+SHOT_KINDS: tuple[str, ...] = ("static", "orbit", "follow")
+
 
 class EventError(ValueError):
     """An event that cannot be played, phrased for whoever wrote the scene."""
@@ -86,10 +89,45 @@ class Shot:
     #: Drift towards this offset over the shot, in studs. A shot that is
     #: perfectly still reads as a screenshot, not a camera.
     drift: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    #: How the camera behaves for the length of the shot.
+    #:
+    #: ``static`` holds the written position and drifts. ``orbit`` revolves
+    #: around the subject — the shot that sells a reveal, and the one people
+    #: mean by "cinematic". ``follow`` keeps a fixed offset from the subject,
+    #: so a moving character stays framed the same way.
+    #:
+    #: The last two need the camera re-aimed every frame against where the
+    #: subject *is now*, which a tween to a fixed CFrame cannot do.
+    kind: str = "static"
+    #: orbit — degrees per second, signed. Slow is cinematic; fast is a
+    #: music video. 20 to 40 reads as deliberate.
+    orbit_speed: float = 25.0
+    #: orbit — studs from the subject. Taken from `position` when zero, so a
+    #: shot can be written by placing the camera rather than by arithmetic.
+    orbit_radius: float = 0.0
+    #: follow — where to sit relative to the subject, in studs. The subject's
+    #: own facing is ignored on purpose: a camera that yaws with a turning
+    #: character makes the viewer seasick.
+    follow_offset: tuple[float, float, float] = (0.0, 3.0, 8.0)
+    #: follow — seconds of lag. Zero is welded to the subject and reads as
+    #: rigid; a little lag is what makes a follow look operated.
+    follow_lag: float = 0.25
 
     def validate(self) -> None:
         if not self.id.strip():
             raise EventError("a shot needs an id")
+        if self.kind not in SHOT_KINDS:
+            raise EventError(
+                f"shot {self.id!r}: unknown kind {self.kind!r}; "
+                f"choose from {', '.join(SHOT_KINDS)}"
+            )
+        if self.kind == "orbit" and abs(self.orbit_speed) < 1e-6:
+            raise EventError(
+                f"shot {self.id!r} orbits at 0 deg/s, which is a static shot "
+                f"written the hard way"
+            )
+        if self.follow_lag < 0:
+            raise EventError(f"shot {self.id!r}: follow_lag cannot be negative")
         if len(self.position) != 3:
             raise EventError(f"shot {self.id!r}: position needs three numbers")
         if not 5.0 <= self.fov <= 120.0:

@@ -192,3 +192,77 @@ def test_an_r6_arm_is_aimed_because_it_has_no_elbow_to_bend():
     moved = _hand(fixed, 12, "Right Arm")
     assert not np.allclose(moved, _hand(clip, 12, "Right Arm"), atol=1e-3)
     assert shortfall >= 0.0
+
+
+# --- the camera -------------------------------------------------------------
+
+
+def _script(scene, tmp_path):
+    from linen.scene import build_scene, write_scene_script
+
+    built = build_scene(scene, planner="offline")
+    return write_scene_script(built, tmp_path / "S.client.luau").read_text()
+
+
+def _with_shot(**shot):
+    base = {"id": "wide", "position": [7, 4, 4], "look_at": "Hero"}
+    base.update(shot)
+    return Scene.from_dict(
+        {
+            "name": "Plan",
+            "actors": [{"name": "Hero", "rig": "R15"}],
+            "cues": [{"id": "beat", "actor": "Hero", "at": 0.0, "prompt": "marche"}],
+            "shots": [base],
+            "events": [{"kind": "camera", "shot": "wide", "cue": "beat"}],
+        }
+    )
+
+
+def test_the_camera_refuses_to_run_on_a_server(tmp_path):
+    """`workspace.CurrentCamera` is nil on a server.
+
+    The same code as a Script stages every body and then shows nobody
+    anything, with no error — which is how this fails without looking like a
+    failure. It has to say so instead.
+    """
+    script = _script(_with_shot(), tmp_path)
+    assert "RunService:IsClient()" in script
+    assert "StarterPlayerScripts" in script
+    assert script.index("RunService:IsClient()") < script.index(
+        "local camera = workspace.CurrentCamera"
+    ), "the guard has to come before the camera is reached for"
+
+
+def test_an_orbit_and_a_follow_reach_the_script(tmp_path):
+    script = _script(_with_shot(kind="orbit", orbit_speed=30), tmp_path)
+    assert 'kind = "orbit"' in script and "orbitSpeed = 30" in script
+    assert "BindToRenderStep" in script, (
+        "an orbit has to be driven per frame; a tween to a fixed CFrame cannot "
+        "follow a subject that moves"
+    )
+
+
+def test_a_follow_offset_survives_the_json_round_trip(tmp_path):
+    import json
+
+    scene = _with_shot(kind="follow", follow_offset=[2.0, 1.5, 6.0], follow_lag=0.4)
+    again = Scene.from_dict(json.loads(json.dumps(scene.to_dict())))
+    assert again.shots[0].follow_offset == (2.0, 1.5, 6.0)
+    assert "followOffset = Vector3.new(2, 1.5, 6)" in _script(again, tmp_path)
+
+
+def test_an_orbit_that_does_not_turn_is_rejected():
+    with pytest.raises(SceneError, match="static shot written the hard way"):
+        _with_shot(kind="orbit", orbit_speed=0).validate()
+
+
+def test_an_unknown_shot_kind_names_the_ones_that_exist():
+    with pytest.raises(SceneError, match="unknown kind"):
+        _with_shot(kind="dolly").validate()
+
+
+def test_the_render_loop_is_torn_down_when_the_scene_ends(tmp_path):
+    """A bound render step outlives the scene and keeps the camera hostage."""
+    script = _script(_with_shot(), tmp_path)
+    assert "UnbindFromRenderStep" in script
+    assert "releaseCamera()" in script

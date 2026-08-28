@@ -197,7 +197,10 @@
         -0.4,
         0,
         -0.3
-      ]
+      ],
+      "kind": "orbit",
+      "orbit_speed": 22,
+      "blend": 0.4
     },
     {
       "id": "mur",
@@ -213,7 +216,14 @@
         -0.2,
         -0.1,
         0
-      ]
+      ],
+      "kind": "follow",
+      "follow_offset": [
+        3.5,
+        1.2,
+        3.0
+      ],
+      "follow_lag": 0.28
     },
     {
       "id": "hero_cu",
@@ -252,6 +262,19 @@
         0,
         0
       ]
+    },
+    {
+      "id": "final",
+      "position": [
+        6,
+        5,
+        5
+      ],
+      "look_at": "Enemy",
+      "fov": 40,
+      "kind": "orbit",
+      "orbit_speed": -14,
+      "blend": 0.6
     }
   ],
   "events": [
@@ -297,7 +320,7 @@
     },
     {
       "kind": "camera",
-      "shot": "large",
+      "shot": "final",
       "cue": "tombe",
       "offset": 0.4
     },

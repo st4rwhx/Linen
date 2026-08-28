@@ -205,7 +205,7 @@ class Scene:
             actors = [Actor(**_tuple_position(a)) for a in data.get("actors", [])]
             cues = [Cue(**_rename_with(c)) for c in data.get("cues", [])]
             props = [Prop(**_tuple_field(p, "grip")) for p in data.get("props", [])]
-            shots = [Shot(**_tuple_field(s, "position", "drift")) for s in data.get("shots", [])]
+            shots = [Shot(**_tuple_field(s, "position", "drift", "follow_offset")) for s in data.get("shots", [])]
             events = [event_from_dict(e) for e in data.get("events", [])]
         except TypeError as exc:
             raise SceneError(f"malformed actor or cue: {exc}") from None
@@ -245,7 +245,31 @@ class Scene:
                 }
                 for cue in self.cues
             ],
+            # Props, shots and events used to be dropped here, which made
+            # `--save-scene` write a file missing the camera, the props and
+            # every sound — and reading it back gave a scene that built and was
+            # not the one that was written.
+            **({"props": [_plain(p) for p in self.props]} if self.props else {}),
+            **({"shots": [_plain(s) for s in self.shots]} if self.shots else {}),
+            **({"events": [_plain(e) for e in self.events]} if self.events else {}),
         }
+
+
+def _plain(item: Any) -> dict[str, Any]:
+    """One dataclass as JSON, without the fields nobody set.
+
+    Writing every default back out would turn a four-line shot into twelve and
+    bury what the author actually chose.
+    """
+    from dataclasses import fields
+
+    out: dict[str, Any] = {}
+    for spec in fields(item):
+        value = getattr(item, spec.name)
+        if value is None or value == spec.default:
+            continue
+        out[spec.name.rstrip("_")] = list(value) if isinstance(value, tuple) else value
+    return out
 
 
 def _tuple_field(data: dict[str, Any], *keys: str) -> dict[str, Any]:

@@ -229,7 +229,7 @@ def test_scene_writes_one_animation_per_actor_plus_a_script(monkeypatch, tmp_pat
 
     assert (out / "Duel_Alice.rbxmx").exists()
     assert "Left Arm" in (out / "Duel_Bob.rbxmx").read_text()
-    script = (out / "Duel.server.luau").read_text()
+    script = (out / "Duel.client.luau").read_text()
     assert "RegisterKeyframeSequence" in script
     assert "2 actors" in capsys.readouterr().out
 

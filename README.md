@@ -27,6 +27,11 @@ prompt texte, sans coût d'API.
 > des pieds en studs et le ramène à 0,05 — sur de la vraie mocap studio. Un
 > animateur juge à l'œil ; un nombre ne s'arrête pas.
 >
+> **Une vraie cinématique de studio — caméra, visages, voix ?**
+> **[`docs/CINEMATIQUE_DE_STUDIO.md`](docs/CINEMATIQUE_DE_STUDIO.md)** : la
+> caméra est cliente et pourquoi ça casse tout, l'orbite et le suivi, les
+> 50 poses FACS et la capture faciale webcam de Studio, `AudioTextToSpeech`.
+>
 > **Comment font ceux qui sortent des animations de fou ?**
 > **[`docs/COMMENT_ILS_FONT.md`](docs/COMMENT_ILS_FONT.md)** : NoCapMocap, la
 > mocap depuis vidéo et son mur de licence, ce que font vraiment les animateurs

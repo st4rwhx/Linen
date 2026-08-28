@@ -175,7 +175,7 @@ def test_a_scene_built_against_a_place_reaches_the_script_that_way(tmp_path, cap
         == 0
     )
 
-    script = (out / "Duel.server.luau").read_text()
+    script = (out / "Duel.client.luau").read_text()
     assert '["Hero"] = "rbxassetid://999"' in script, "the published id must reach the script"
     assert "Thug" not in script.split("ANIMATION_IDS")[1].split("}")[0], (
         "an actor with no published id must be absent, not present and empty"

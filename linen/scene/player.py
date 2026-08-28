@@ -52,6 +52,18 @@ local function require_(instance: Instance?, what: string): Instance?
 end
 
 local folder = require_(resolve(FOLDER_PATH), FOLDER_PATH)
+--[[ The camera belongs to the client. On a server `workspace.CurrentCamera`
+     is nil, so a scene run from the wrong place would stage its bodies and
+     then quietly show nobody anything — the failure with no error. ]]
+if not RunService:IsClient() then
+\twarn(
+\t\t"Linen: cette scene pilote la camera, elle doit tourner cote client. "
+\t\t.. "Mets-la dans StarterPlayer > StarterPlayerScripts (LocalScript), "
+\t\t.. "ou lance-la depuis la barre de commande de Studio."
+\t)
+\treturn
+end
+
 local camera = workspace.CurrentCamera
 
 -- ---------------------------------------------------------------- staging --
@@ -322,36 +334,90 @@ end
 
 -- ----------------------------------------------------------------- camera --
 local originalCameraType = camera.CameraType
+--[[ The camera is the client's, always. `workspace.CurrentCamera` does not
+     exist on a server, so every line below runs in the LocalScript half of
+     this scene and the server only says *which* shot to be on. A cinematic
+     whose camera code sits on the server plays perfectly in the Command Bar,
+     where a local camera happens to exist, and does nothing at all in a real
+     game — which is the way this fails without an error. ]]
+local activeShot = nil
+local shotStartedAt = 0
+local shotOrigin = nil
+
+local function subjectOf(shot): Vector3?
+\tlocal found = workspace:FindFirstChild(shot.lookAt, true)
+\tif found and found:IsA("PVInstance") then
+\t\treturn found:GetPivot().Position
+\tend
+\treturn nil
+end
+
 local function cutTo(shotId: string)
 \tfor _, shot in SHOTS do
 \t\tif shot.id ~= shotId then
 \t\t\tcontinue
 \t\tend
-\t\t-- Only a PVInstance has a pivot, and FindFirstChild hands back any
-\t\t-- Instance: a shot aimed at a Folder or a Sound would crash here.
-\t\tlocal found = workspace:FindFirstChild(shot.lookAt, true)
-\t\tlocal target = if found and found:IsA("PVInstance") then found else nil
-\t\tlocal focus = if target then target:GetPivot().Position else Vector3.zero
-\t\tlocal goal = CFrame.lookAt(shot.position, focus)
-
+\t\tactiveShot = shot
+\t\tshotStartedAt = os.clock()
+\t\tshotOrigin = camera.CFrame
 \t\tcamera.CameraType = Enum.CameraType.Scriptable
 \t\tcamera.FieldOfView = shot.fov
-\t\tif shot.blend > 0 then
-\t\t\tTweenService:Create(camera, TweenInfo.new(shot.blend, Enum.EasingStyle.Quad), {
-\t\t\t\tCFrame = goal,
-\t\t\t}):Play()
-\t\telse
-\t\t\tcamera.CFrame = goal
-\t\tend
-
-\t\t-- A perfectly still camera reads as a screenshot, so every shot drifts.
-\t\tif shot.drift.Magnitude > 0 then
-\t\t\tTweenService:Create(camera, TweenInfo.new(4, Enum.EasingStyle.Linear), {
-\t\t\t\tCFrame = CFrame.lookAt(shot.position + shot.drift, focus),
-\t\t\t}):Play()
-\t\tend
 \t\treturn
 \tend
+end
+
+--[[ Where the camera should be, this instant. Driven every frame rather than
+     tweened to a fixed CFrame, because an orbit and a follow both depend on
+     where the subject is *now* — and a subject in a fight does not stay put. ]]
+local function poseFor(shot, elapsed: number): CFrame
+\tlocal focus = subjectOf(shot) or Vector3.zero
+
+\tif shot.kind == "orbit" then
+\t\tlocal flat = Vector3.new(shot.position.X - focus.X, 0, shot.position.Z - focus.Z)
+\t\tlocal radius = if shot.orbitRadius > 0 then shot.orbitRadius else flat.Magnitude
+\t\tif radius < 0.1 then
+\t\t\tradius = 8
+\t\tend
+\t\tlocal start = math.atan2(flat.Z, flat.X)
+\t\tlocal angle = start + math.rad(shot.orbitSpeed) * elapsed
+\t\tlocal height = shot.position.Y - focus.Y
+\t\tlocal where = focus + Vector3.new(math.cos(angle) * radius, height, math.sin(angle) * radius)
+\t\treturn CFrame.lookAt(where, focus)
+\tend
+
+\tif shot.kind == "follow" then
+\t\treturn CFrame.lookAt(focus + shot.followOffset, focus)
+\tend
+
+\tlocal drift = shot.drift * math.clamp(elapsed / 4, 0, 1)
+\treturn CFrame.lookAt(shot.position + drift, focus)
+end
+
+RunService:BindToRenderStep("LinenCamera", Enum.RenderPriority.Camera.Value, function(delta: number)
+\tif activeShot == nil then
+\t\treturn
+\tend
+\tlocal elapsed = os.clock() - shotStartedAt
+\tlocal goal = poseFor(activeShot, elapsed)
+
+\t--[[ Two easings, and they are different things. `blend` is the cut itself,
+\t     eased over its own length so a change of shot travels instead of
+\t     snapping. `followLag` is the operator's hand: a camera welded to its
+\t     subject reads as rigid, and a little lag is what makes it look held. ]]
+\tif activeShot.blend > 0 and elapsed < activeShot.blend and shotOrigin then
+\t\tlocal t = elapsed / activeShot.blend
+\t\tcamera.CFrame = shotOrigin:Lerp(goal, t * t * (3 - 2 * t))
+\telseif activeShot.kind == "follow" and activeShot.followLag > 0 then
+\t\tcamera.CFrame = camera.CFrame:Lerp(goal, math.clamp(delta / activeShot.followLag, 0, 1))
+\telse
+\t\tcamera.CFrame = goal
+\tend
+end)
+
+local function releaseCamera()
+\tRunService:UnbindFromRenderStep("LinenCamera")
+\tactiveShot = nil
+\tcamera.CameraType = Enum.CameraType.Custom
 end
 
 -- ----------------------------------------------------------------- events --
@@ -550,6 +616,7 @@ task.spawn(function()
 end)
 
 task.delay(DURATION + 1, function()
+\treleaseCamera()
 \tcamera.CameraType = originalCameraType
 end)
 
