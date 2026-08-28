@@ -143,6 +143,11 @@ SYLLABLE_SECONDS = 0.11
 BLINK_EVERY = 4.0
 BLINK_SECONDS = 0.12
 
+#: No blink before this. A cinematic that opens on a character with its eyes
+#: shut reads as a mistake, and a blink on frame zero has no room ahead of it
+#: to ease into — it snaps.
+BLINK_NOT_BEFORE = 0.4
+
 
 @dataclass
 class Key:
@@ -168,9 +173,16 @@ class FaceTrack:
         still raised under a smile.
         """
         held = {key.control for key in self.keys}
+        start = max(at - ease, 0.0)
         for control in sorted(held | set(poses)):
             value = float(poses.get(control, 0.0))
-            self.keys.append(Key(max(at - ease, 0.0), control, _last(self.keys, control, at)))
+            # A key at the same instant as the one it eases towards is not an
+            # ease — it is two contradictory values on one frame, and which of
+            # them wins is decided by list order rather than by anything
+            # meaningful. It happens whenever a beat lands inside its own ease
+            # of the start of the scene.
+            if start < at - 1e-9:
+                self.keys.append(Key(start, control, _last(self.keys, control, at)))
             self.keys.append(Key(at, control, value))
 
     def controls(self) -> set[str]:
@@ -178,10 +190,19 @@ class FaceTrack:
 
 
 def _last(keys: list[Key], control: str, before: float) -> float:
-    value = 0.0
+    """What a control is set to at `before`, by time rather than by position.
+
+    The list is not guaranteed to be in order — it is sorted when written —
+    so reading "the last one appended" answers a different question than
+    "the one in force", and the two disagree exactly when a later pass adds a
+    key in the past.
+    """
+    latest, value = None, 0.0
     for key in keys:
-        if key.control == control and key.at <= before:
-            value = key.value
+        if key.control != control or key.at > before + 1e-9:
+            continue
+        if latest is None or key.at >= latest:
+            latest, value = key.at, key.value
     return value
 
 
@@ -224,9 +245,16 @@ def speak(track: FaceTrack, at: float, text: str) -> float:
 
 
 def blinks(duration: float, offset: float) -> list[tuple[float, dict[str, float]]]:
-    """When to blink over a scene, staggered so a cast does not blink together."""
+    """When to blink over a scene, staggered so a cast does not blink together.
+
+    Never on the opening frame. An actor whose offset landed on zero blinked
+    at exactly 0.000 — a cinematic opening on a character with its eyes shut,
+    and with no room ahead of it to ease into, so it snapped rather than
+    blinked. The stagger is a phase inside the interval instead, which keeps
+    a short scene from going by without a single blink in it.
+    """
     out = []
-    when = offset % BLINK_EVERY
+    when = BLINK_NOT_BEFORE + offset % (BLINK_EVERY - BLINK_NOT_BEFORE)
     while when < duration:
         out.append((when, {"LeftEyeClosed": 1.0, "RightEyeClosed": 1.0}))
         out.append((when + BLINK_SECONDS, {}))
@@ -240,36 +268,80 @@ def build_faces(scene, schedule, duration: float) -> dict[str, FaceTrack]:
     Expressions come from `face` events, mouths from `line` events, and blinks
     from the fact that faces blink. Nothing here is captured and nothing needs
     a person: a written scene comes out with a performance on it.
+
+    Everything is laid out first and applied in one pass **in time order**.
+    That is not tidiness. Each key carries the value of every control the face
+    is already holding, so a beat written into the middle of a track that is
+    already built is computed against a face that no longer exists — the
+    blinks used to be added last, and a spoken line four seconds later still
+    believed the eyes were half shut by an expression a blink had long since
+    released. It showed up as the eyes snapping shut mid-sentence.
     """
     starts = {entry.cue.id: entry.start for entry in schedule}
-    tracks: dict[str, FaceTrack] = {}
+    #: (when, poses, ease, kind) per actor, where kind is "" for anything
+    #: written in the scene, or "shut"/"open" for the two halves of a blink.
+    #: A blink adds to whatever the face is already doing rather than replacing
+    #: it, so it can only be resolved once the keys before it exist.
+    planned: dict[str, list[tuple[float, dict[str, float], float, str]]] = {}
 
-    def track_for(actor: str) -> FaceTrack:
-        return tracks.setdefault(actor, FaceTrack(actor=actor))
-
-    timed = sorted(
-        (
-            (starts[event.cue] + event.offset, event)
-            for event in scene.events
-            if event.kind in ("face", "line") and event.actor
-        ),
-        key=lambda pair: pair[0],
-    )
-    for when, event in timed:
-        track = track_for(event.actor)
+    for event in scene.events:
+        if event.kind not in ("face", "line") or not event.actor:
+            continue
+        when = starts[event.cue] + event.offset
+        actions = planned.setdefault(event.actor, [])
         if event.kind == "face":
-            track.add(when, EXPRESSIONS.get(event.expression or "neutral", {}))
+            actions.append((when, EXPRESSIONS.get(event.expression or "neutral", {}), 0.12, ""))
         else:
-            speak(track, when, event.text or "")
+            actions.extend(_speech(when, event.text or ""))
 
-    # Blinks last, so an expression that closes the eyes is not fought over by
-    # a blink landing on the same frame.
     for index, actor in enumerate(scene.actors):
-        track = track_for(actor.name)
-        for when, poses in blinks(duration, index * 1.3):
-            if not any(abs(key.at - when) < 0.2 for key in track.keys if "EyeClosed" in key.control):
-                track.add(when, {**_held(track, when), **poses}, ease=0.05)
-    return {name: track for name, track in tracks.items() if track.keys}
+        actions = planned.setdefault(actor.name, [])
+        # An expression that closes the eyes owns those frames; a blink landing
+        # on them is two things fighting over one lid.
+        shut = [
+            when
+            for when, poses, _, _ in actions
+            if any("EyeClosed" in control and value > 0.1 for control, value in poses.items())
+        ]
+        scheduled = blinks(duration, index * 1.3)
+        for (when, poses), release in zip(scheduled[0::2], scheduled[1::2]):
+            if any(abs(when - other) < 0.2 for other in shut):
+                continue
+            actions.append((when, poses, 0.05, "shut"))
+            actions.append((release[0], release[1], 0.05, "open"))
+
+    tracks: dict[str, FaceTrack] = {}
+    for actor, actions in planned.items():
+        track = FaceTrack(actor=actor)
+        #: What the lids were doing before the blink now in progress. Opening
+        #: them back to zero would be right for a neutral face and wrong for a
+        #: wince: a blink during an expression that already narrows the eyes
+        #: used to pop them wide open in the middle of it.
+        lids: dict[str, float] = {}
+        for when, poses, ease, kind in sorted(actions, key=lambda action: action[0]):
+            if kind == "shut":
+                lids = {control: _last(track.keys, control, when) for control in poses}
+            if kind:
+                poses = {**_held(track, when), **(lids if kind == "open" else {}), **poses}
+            track.add(when, poses, ease=ease)
+        if track.keys:
+            tracks[actor] = track
+    return tracks
+
+
+def _speech(at: float, text: str) -> list[tuple[float, dict[str, float], float, str]]:
+    """A line as timed mouth shapes, laid out rather than written straight in.
+
+    Same shapes and same timing as `speak`; the difference is that these can be
+    merged with everything else the face does before any of it is applied.
+    """
+    out = []
+    when = at
+    for shape in visemes(text):
+        out.append((when, VISEMES[shape], SYLLABLE_SECONDS * 0.6, ""))
+        when += SYLLABLE_SECONDS
+    out.append((when, {}, 0.15, ""))
+    return out
 
 
 def _held(track: FaceTrack, when: float) -> dict[str, float]:

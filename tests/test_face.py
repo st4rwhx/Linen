@@ -151,3 +151,105 @@ def test_no_pose_is_outside_the_zero_to_one_range(name):
     """FaceControls clamps, so a value over one is a silent truncation."""
     for control, value in EXPRESSIONS[name].items():
         assert 0.0 <= value <= 1.0, f"{name}.{control} = {value}"
+
+
+# --- what the deep audit found ----------------------------------------------
+
+
+def test_no_two_keys_disagree_about_one_control_on_one_frame():
+    """The script drives the face by walking the keys in time order.
+
+    Two keys at the same instant with different values leave it to decide by
+    list position which one wins, and nothing about the list position means
+    anything. It happened whenever a beat landed inside its own ease of the
+    start of the scene: the ease-from key clamped to zero, onto its target.
+    """
+    import json
+    from pathlib import Path
+
+    scene = Scene.from_dict(json.loads(Path("examples/contre.scene.json").read_text()))
+    for actor, track in build_scene(scene, planner="offline").faces.items():
+        seen: dict[tuple[float, str], float] = {}
+        for key in sorted(track.keys, key=lambda k: (k.at, k.control)):
+            slot = (round(key.at, 4), key.control)
+            assert abs(seen.get(slot, key.value) - key.value) < 1e-9, (
+                f"{actor}: {key.control} is both {seen[slot]} and {key.value} at {key.at}"
+            )
+            seen[slot] = key.value
+
+
+def test_no_cinematic_opens_on_a_character_with_its_eyes_shut():
+    """The first actor's blink offset was zero, so it blinked at exactly 0.000.
+
+    With no room ahead of it to ease into, that is not a blink — it is a
+    cinematic whose first frame is a face with its eyes closed.
+    """
+    for offset in (0.0, 1.3, 2.6, 3.9, 4.0, 8.0):
+        first = min(when for when, poses in blinks(20.0, offset) if poses)
+        assert first > 0.2, f"offset {offset} blinks at {first}"
+
+
+def test_a_short_scene_still_blinks():
+    """Pushing the first blink away from zero must not push it off the end."""
+    for offset in (0.0, 1.3, 2.6):
+        assert [when for when, poses in blinks(3.5, offset) if poses], offset
+
+
+def test_a_blink_during_a_wince_returns_the_eyes_to_the_wince():
+    """`pain` holds the lids at 0.8. Opening a blink back to zero pops the eyes
+    wide open in the middle of it, which reads as the expression dropping."""
+    scene = Scene.from_dict(
+        {
+            "name": "Coup",
+            "actors": [{"name": "Hero", "rig": "R15"}],
+            "cues": [{"id": "beat", "actor": "Hero", "at": 0.0, "prompt": "il encaisse",
+                      "duration": 6.0}],
+            "events": [{"kind": "face", "actor": "Hero", "cue": "beat", "offset": 4.2,
+                        "expression": "pain"}],
+        }
+    )
+    keys = sorted(build_scene(scene, planner="offline").faces["Hero"].keys,
+                  key=lambda k: (k.at, k.control))
+    lid = [(k.at, k.value) for k in keys if k.control == "LeftEyeClosed"]
+    winced = [at for at, value in lid if abs(value - 0.8) < 1e-6]
+    assert winced, "the wince has to reach the lids at all"
+    after = [value for at, value in lid if at > max(winced)]
+    assert not after or after[-1] > 0.5, (
+        f"the eyes end up at {after[-1]} with the wince still on: {lid}"
+    )
+
+
+def test_a_key_written_after_the_track_is_built_cannot_carry_a_stale_value():
+    """Every key carries the value of every control the face is already holding.
+
+    So a beat written into the middle of an already-built track is computed
+    against a face that no longer exists. The blinks used to be added last,
+    and a line spoken four seconds later still believed the eyes were held
+    half shut by an expression a blink had long since released — the eyes
+    snapped shut mid-sentence. Everything is laid out and applied in time
+    order now, so there is no "later pass" to disagree with.
+    """
+    scene = Scene.from_dict(
+        {
+            "name": "Suite",
+            "actors": [{"name": "Hero", "rig": "R15"}],
+            "cues": [{"id": "beat", "actor": "Hero", "at": 0.0, "prompt": "il parle",
+                      "duration": 8.0}],
+            "events": [
+                {"kind": "face", "actor": "Hero", "cue": "beat", "offset": 1.0,
+                 "expression": "pain"},
+                {"kind": "face", "actor": "Hero", "cue": "beat", "offset": 2.0,
+                 "expression": "neutral"},
+                {"kind": "line", "actor": "Hero", "cue": "beat", "offset": 5.5,
+                 "text": "je vais bien"},
+            ],
+        }
+    )
+    keys = sorted(build_scene(scene, planner="offline").faces["Hero"].keys,
+                  key=lambda k: (k.at, k.control))
+    during = [
+        (k.at, k.value)
+        for k in keys
+        if k.control == "LeftEyeClosed" and 5.4 < k.at < 7.0 and k.value > 0.5
+    ]
+    assert not during, f"the eyes close during the line, four seconds late: {during}"
