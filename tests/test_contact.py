@@ -374,3 +374,66 @@ def test_the_travel_reaches_the_script(tmp_path):
     assert "local MOVES" in script
     assert "driveMoves" in script
     assert "PivotTo" in script, "the model has to be carried; the clip cannot"
+
+
+# --- what the deep audit found ----------------------------------------------
+
+
+def test_reaching_straight_behind_yourself_actually_turns_the_arm():
+    """The exact half turn, which is the one case a naive formula gets wrong.
+
+    An arm hanging down asked to point straight up is the antiparallel case:
+    the cross product of the two directions is zero, so the axis has to come
+    from somewhere else. A copy of this rotation living here returned a half
+    turn *about* the source direction — which leaves the source exactly where
+    it was. The arm did not move, the shortfall was the full length of the
+    reach, and nothing said a word. There is one implementation now.
+    """
+    clip = _still("R6")
+    pose = {name: track[0] for name, track in clip.rotations.items()}
+    placed = place_rotations(clip.rig, pose)
+    from linen.scene.contact import _joint
+
+    shoulder = _joint(clip, placed, "Right Arm")
+    behind = shoulder - (placed["Right Arm"][0] - shoulder)
+
+    fixed, shortfall = solve_reach(
+        clip, base_frame((0, 0, 0), 0.0), "Right Arm", {12: behind}, blend_frames=2
+    )
+    assert shortfall < 1e-6, "the arm has the length; only the turn was missing"
+    assert np.allclose(_hand(fixed, 12, "Right Arm"), behind, atol=1e-6)
+
+
+def test_a_target_that_is_not_a_number_is_refused_not_reported_as_reached():
+    """`max(0.0, nan)` is `0.0`, and zero studs short reads as `atteint`.
+
+    So a corrupt clip on the other actor made every hand aimed at it come back
+    as having landed perfectly. A reach that cannot be solved has to say so.
+    """
+    from linen.scene.contact import ContactError
+
+    clip = _still()
+    with pytest.raises(ContactError, match="not a finite point"):
+        solve_reach(
+            clip,
+            base_frame((0, 0, 0), 0.0),
+            "RightHand",
+            {12: np.array([0.5, np.nan, -1.2])},
+            blend_frames=2,
+        )
+
+
+def test_a_broken_target_names_the_cue_it_came_from(monkeypatch):
+    """The scene is what the author wrote; a frame index is not.
+
+    A refusal that says `frame 37` sends someone counting frames. Saying which
+    cue it was is the only form of it they can act on.
+    """
+    from linen.scene import contact as contact_module
+
+    def refuse(*args, **kwargs):
+        raise contact_module.ContactError("the target is not a finite point")
+
+    monkeypatch.setattr(contact_module, "solve_reach", refuse)
+    with pytest.raises(SceneError, match="contact on cue 'push'"):
+        build_scene(_fight(), planner="offline")

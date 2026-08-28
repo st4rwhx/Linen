@@ -246,7 +246,7 @@ def _solve_contacts(scene: Scene, schedule: list[ScheduledCue], clips) -> list:
     hand already is decides how far it has to travel, and both bodies have to
     be placed before either can be aimed at the other.
     """
-    from .contact import BLEND_SECONDS, Reach, base_frame, solve_reach
+    from .contact import BLEND_SECONDS, ContactError, Reach, base_frame, solve_reach
 
     contacts = [event for event in scene.events if event.kind == "contact"]
     if not contacts:
@@ -276,9 +276,12 @@ def _solve_contacts(scene: Scene, schedule: list[ScheduledCue], clips) -> list:
         if targets is None:
             continue
 
-        fixed, shortfall = solve_reach(
-            clip, bases[event.actor], event.limb, targets, blend_frames=blend
-        )
+        try:
+            fixed, shortfall = solve_reach(
+                clip, bases[event.actor], event.limb, targets, blend_frames=blend
+            )
+        except ContactError as exc:
+            raise SceneError(f"contact on cue {event.cue!r}: {exc}") from None
         clips[event.actor] = fixed
         reaches.append(
             Reach(

@@ -43,6 +43,10 @@ CHAINS: dict[str, tuple[str, str, str]] = {
 BLEND_SECONDS = 0.12
 
 
+class ContactError(ValueError):
+    """A reach that cannot be solved, phrased for whoever wrote the scene."""
+
+
 @dataclass
 class Reach:
     """One hand asked to be somewhere, and how close it got."""
@@ -105,6 +109,19 @@ def solve_reach(
     chain = CHAINS.get(limb)
     if chain is None or not targets:
         return clip, 0.0
+
+    # A target that is not a number means the other actor's animation is
+    # corrupt. Left alone it slides through: the solve does nothing, the
+    # distance to it compares false against everything, and the reach is
+    # reported as reached. Saying which actor is broken beats a clean lie.
+    finite = all(
+        np.isfinite(np.asarray(point, dtype=float)).all() for point in targets.values()
+    )
+    if not finite:
+        raise ContactError(
+            f"the target for {limb} is not a finite point — whatever is being "
+            f"reached for has a broken animation, so nothing here can aim at it"
+        )
 
     upper, lower, hand = chain
     if upper not in clip.rotations:
@@ -256,14 +273,17 @@ def _joint(clip: AnimationClip, placed, part: str) -> np.ndarray:
 
 
 def _between(source: np.ndarray, target: np.ndarray) -> np.ndarray:
-    """The rotation taking one direction onto another."""
-    a = source / max(float(np.linalg.norm(source)), 1e-9)
-    b = target / max(float(np.linalg.norm(target)), 1e-9)
-    axis = np.cross(a, b)
-    size = float(np.linalg.norm(axis))
-    if size < 1e-9:
-        return np.eye(3) if float(a @ b) > 0 else -np.eye(3) + 2.0 * np.outer(a, a)
-    return _matrix(axis / size, float(np.arctan2(size, float(a @ b))))
+    """The rotation taking one direction onto another.
+
+    Deferred to the foot planting's version rather than written again. The
+    second copy here got the antiparallel case wrong — it returned a half turn
+    *about* the source, which leaves the source exactly where it was — so an
+    arm asked to reach straight behind itself did not move at all, silently.
+    One implementation cannot disagree with itself.
+    """
+    from ..polish import _rotation_between
+
+    return _rotation_between(source, target)
 
 
 def _matrix(axis: np.ndarray, angle: float) -> np.ndarray:
@@ -281,6 +301,7 @@ def _axis_angle(axis: np.ndarray, angle: float) -> np.ndarray:
 __all__ = [
     "BLEND_SECONDS",
     "CHAINS",
+    "ContactError",
     "Reach",
     "base_frame",
     "quat_to_mat",
