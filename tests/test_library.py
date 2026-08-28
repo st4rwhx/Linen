@@ -562,3 +562,35 @@ def test_a_clear_adverb_outweighs_the_join(tmp_path):
     still = {part: track_[0] for part, track_ in clip.rotations.items()}
     lo, _ = best_window(clip, track, "il saute haut", 2.0, follows=still)
     assert lo > 300, "the flight is still the answer to 'saute'"
+
+
+def test_an_index_with_no_words_in_it_says_so(tmp_path, capsys):
+    """CMU's files are called `02_03`. A search matches words; that has none.
+
+    Built without `--descriptions` the index reports its count, looks healthy,
+    and then answers nothing to every question ever asked of it — and the
+    obvious conclusion is that the search is broken rather than the index.
+    """
+    from test_sources import bvh_text
+
+    folder = tmp_path / "clips"
+    folder.mkdir()
+    for name in ("02_03", "09_11", "14_07"):
+        (folder / f"{name}.bvh").write_text(bvh_text())
+
+    library = build_library(folder)
+    assert library.entries and library.warning
+    assert "--descriptions" in library.warning
+    assert library.search("il court") == [], "the point: it finds nothing"
+
+
+def test_an_index_that_has_words_carries_no_warning(tmp_path):
+    from test_sources import bvh_text
+
+    folder = tmp_path / "clips"
+    folder.mkdir()
+    for name in ("running fast", "walking slowly"):
+        (folder / f"{name}.bvh").write_text(bvh_text())
+    library = build_library(folder)
+    assert not library.warning
+    assert library.search("running")

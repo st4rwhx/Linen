@@ -282,7 +282,7 @@ end
      set to a pose and left there reads as a mask; a face that never blinks
      reads as a corpse. ]]
 local faceControls: { [string]: any } = {}
-local faceCursor: { [string]: number } = {}
+local faceMissing: { [string]: boolean } = {}
 
 local function findFace(actorName: string): any
 \tif faceControls[actorName] ~= nil then
@@ -292,34 +292,35 @@ local function findFace(actorName: string): any
 \tlocal head = model and model:FindFirstChild("Head")
 \tlocal controls = head and head:FindFirstChildOfClass("FaceControls")
 \tfaceControls[actorName] = controls or false
+\tif controls == nil then
+\t\twarn(
+\t\t\t`Linen: "{actorName}" n'a pas de FaceControls — il lui faut une dynamic `
+\t\t\t.. `head pour que les expressions se voient. Le reste de la scene joue.`
+\t\t)
+\tend
 \treturn controls
+end
+
+--[[ A head only has to ship seventeen of the fifty FACS poses to be published,
+     so a scene using an optional one meets heads that do not have it. Saying
+     so once beats a pcall that fails silently on every frame: the face plays,
+     nothing moves, and nothing tells you which pose was missing. ]]
+local function apply(controls: any, actorName: string, property: string, value: number)
+\tlocal ok = pcall(function()
+\t\t(controls :: any)[property] = math.clamp(value, 0, 1)
+\tend)
+\tif not ok then
+\t\tlocal seen = `{actorName}.{property}`
+\t\tif not faceMissing[seen] then
+\t\t\tfaceMissing[seen] = true
+\t\t\twarn(`Linen: la tete de "{actorName}" n'a pas la pose FACS "{property}"`)
+\t\tend
+\tend
 end
 
 --[[ Between two keys on the same control, eased rather than stepped. The keys
      were generated with their own approach times, so a plain smoothstep here
      is enough — the shaping is in where the keys are, not in this curve. ]]
---[[ Carry the actors. The animation is in place — Roblox nails the root — so
-     a character that crosses the scene is the model being moved, eased at the
-     ends so a walk starts and stops instead of jerking into motion. The
-     character keeps facing the way it travels. ]]
-local function driveMoves(elapsed: number)
-\tfor _, move in MOVES do
-\t\tlocal model = models[move.actor]
-\t\tif model == nil or elapsed < move.start then
-\t\t\tcontinue
-\t\tend
-\t\tlocal span = math.max(move.stop - move.start, 1e-3)
-\t\tlocal t = math.clamp((elapsed - move.start) / span, 0, 1)
-\t\tlocal where = move.from:Lerp(move.to, t * t * (3 - 2 * t))
-\t\tlocal heading = move.to - move.from
-\t\tif heading.Magnitude > 0.1 then
-\t\t\tmodel:PivotTo(CFrame.lookAt(where, where + Vector3.new(heading.X, 0, heading.Z)))
-\t\telse
-\t\t\tmodel:PivotTo(CFrame.new(where) * (model:GetPivot() - model:GetPivot().Position))
-\t\tend
-\tend
-end
-
 local function driveFaces(elapsed: number)
 \tfor actorName, keys in FACES do
 \t\tlocal controls = findFace(actorName)
@@ -328,31 +329,31 @@ local function driveFaces(elapsed: number)
 \t\tend
 \t\tlocal current: { [string]: number } = {}
 \t\tlocal previous: { [string]: { at: number, value: number } } = {}
+\t\tlocal settled: { [string]: boolean } = {}
 \t\tfor _, key in keys do
 \t\t\tif key.at <= elapsed then
 \t\t\t\tprevious[key.control] = { at = key.at, value = key.value }
 \t\t\t\tcurrent[key.control] = key.value
-\t\t\telse
+\t\t\t\tsettled[key.control] = nil
+\t\t\telseif not settled[key.control] then
+\t\t\t\t--[[ The first key still ahead of us is the one being travelled
+\t\t\t\t     towards. Every later one is somebody else's problem, so the
+\t\t\t\t     control is marked settled rather than lerped again. ]]
 \t\t\t\tlocal before = previous[key.control]
-\t\t\t\tif before ~= nil and current[key.control] == before.value then
+\t\t\t\tif before ~= nil then
 \t\t\t\t\tlocal span = key.at - before.at
 \t\t\t\t\tif span > 1e-4 then
 \t\t\t\t\t\tlocal t = math.clamp((elapsed - before.at) / span, 0, 1)
 \t\t\t\t\t\tcurrent[key.control] = before.value
 \t\t\t\t\t\t\t+ (key.value - before.value) * (t * t * (3 - 2 * t))
 \t\t\t\t\tend
-\t\t\t\t\tcurrent[key.control .. "@done"] = 1
+\t\t\t\t\tsettled[key.control] = true
 \t\t\t\tend
 \t\t\tend
 \t\tend
 \t\tfor property, value in current do
-\t\t\tif string.find(property, "@") == nil then
-\t\t\t\tpcall(function()
-\t\t\t\t\t(controls :: any)[property] = math.clamp(value, 0, 1)
-\t\t\t\tend)
-\t\t\tend
+\t\t\tapply(controls, actorName, property, value)
 \t\tend
-\t\tfaceCursor[actorName] = elapsed
 \tend
 end
 

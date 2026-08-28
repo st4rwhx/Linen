@@ -99,6 +99,9 @@ class Library:
     root: Path
     entries: list[Entry] = field(default_factory=list)
     source: str = ""
+    #: Set when the index built cleanly but will not search well. Not an error
+    #: — every clip is there — so it is carried out rather than raised.
+    warning: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -210,7 +213,29 @@ def build_library(
             f"aucun des {len(files)} fichiers de {folder} n'a pu être lu — "
             f"vérifie --skeleton et --units"
         )
+
+    # A search matches words. CMU's files are called `02_03`, which carries
+    # none, so an index built without `--descriptions` builds cleanly, reports
+    # its count, and then answers nothing to every question ever asked of it —
+    # and the obvious conclusion is that the search is broken.
+    wordless = sum(1 for entry in library.entries if not _has_words(entry.description))
+    if wordless > len(library.entries) // 2:
+        library.warning = (
+            f"{wordless} clips sur {len(library.entries)} n'ont pas de description "
+            f"— leur nom de fichier ne contient aucun mot, donc une recherche ne "
+            f"les trouvera jamais. Passe --descriptions avec l'index texte du "
+            f"jeu de données (pour CMU : cmu-mocap-index-text.txt)."
+        )
     return library
+
+
+def _has_words(description: str) -> bool:
+    """Whether a description says anything a search could match.
+
+    `02_03` and `take 4` are names, not descriptions: strip the digits and the
+    separators and nothing is left to match against.
+    """
+    return any(len(word) > 2 for word in re.findall(r"[^\W\d_]+", description))
 
 
 def _index_one(

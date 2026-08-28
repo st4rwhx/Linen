@@ -703,6 +703,8 @@ def _cmd_library(args) -> int:
             units=args.units,
             on_progress=progress,
         )
+        if library.warning:
+            print(f"attention: {library.warning}", file=sys.stderr)
         path = library.save(args.out)
         print(f"{path}: {len(library.entries)} clips indexes")
         return 0
