@@ -226,17 +226,17 @@ class Scene:
         if unknown:
             raise SceneError(f"unexpected field(s): {', '.join(sorted(unknown))}")
 
-        try:
-            actors = [Actor(**_tuple_position(a)) for a in data.get("actors", [])]
-            cues = [
-                Cue(**_maybe_vector(_rename_with(c), "move_to"))
-                for c in data.get("cues", [])
-            ]
-            props = [Prop(**_tuple_field(p, "grip")) for p in data.get("props", [])]
-            shots = [Shot(**_tuple_field(s, "position", "drift", "follow_offset")) for s in data.get("shots", [])]
-            events = [event_from_dict(e) for e in data.get("events", [])]
-        except TypeError as exc:
-            raise SceneError(f"malformed actor or cue: {exc}") from None
+        actors = [_built("actor", Actor, _tuple_position(a)) for a in data.get("actors", [])]
+        cues = [
+            _built("cue", Cue, _maybe_vector(_rename_with(c), "move_to"))
+            for c in data.get("cues", [])
+        ]
+        props = [_built("prop", Prop, _tuple_field(p, "grip")) for p in data.get("props", [])]
+        shots = [
+            _built("shot", Shot, _tuple_field(s, "position", "drift", "follow_offset"))
+            for s in data.get("shots", [])
+        ]
+        events = [event_from_dict(e) for e in data.get("events", [])]
 
         scene = cls(
             name=str(data.get("name", "Scene")),
@@ -281,6 +281,22 @@ class Scene:
             **({"shots": [_plain(s) for s in self.shots]} if self.shots else {}),
             **({"events": [_plain(e) for e in self.events]} if self.events else {}),
         }
+
+
+def _built(what: str, cls: type, payload: dict[str, Any]):
+    """Construct one piece of a scene, and blame the key rather than Python.
+
+    Someone writing this file is writing JSON. A message about an unexpected
+    keyword argument to a constructor is about a thing they have never seen,
+    so the key they actually typed is what gets named — along with the ones
+    that would have worked.
+    """
+    from .events import _misfit
+
+    try:
+        return cls(**payload)
+    except TypeError as exc:
+        raise SceneError(_misfit(what, cls, payload, exc)) from None
 
 
 def _plain(item: Any) -> dict[str, Any]:

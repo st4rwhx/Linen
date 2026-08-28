@@ -904,7 +904,7 @@ def _window(clip: AnimationClip, lo: int, hi: int) -> AnimationClip:
 
 
 def _cmd_synth(args) -> int:
-    plan = MotionPlan.from_dict(json.loads(args.plan.read_text()))
+    plan = MotionPlan.from_dict(_json_object(args.plan))
     return _write(_synthesize_all(plan, args), args)
 
 
@@ -932,6 +932,34 @@ def _duration(value: str) -> float | None:
         ) from None
 
 
+def _json_object(path: Path) -> dict:
+    """Read a JSON file, and say where it went wrong in terms of the file.
+
+    `Expecting value: line 1 column 1 (char 0)` is what the parser says about
+    an empty file, a stray comma, or a file that is not JSON at all — and it
+    never mentions which file. Someone writing a scene by hand meets this
+    message more than any other, so it names the file and the place.
+    """
+    from .scene import SceneError
+
+    text = path.read_text()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        if not text.strip():
+            raise SceneError(f"{path.name} is empty") from None
+        line = text.splitlines()[exc.lineno - 1] if exc.lineno <= len(text.splitlines()) else ""
+        raise SceneError(
+            f"{path.name} is not valid JSON: {exc.msg}, line {exc.lineno} column "
+            f"{exc.colno}\n    {line.strip()[:80]}"
+        ) from None
+    if not isinstance(data, dict):
+        raise SceneError(
+            f"{path.name} holds a {type(data).__name__}; a scene is a JSON object"
+        )
+    return data
+
+
 def _cmd_scene(args) -> int:
     from .scene import Scene, build_scene, scene_from_prompt, write_scene_script
 
@@ -942,7 +970,7 @@ def _cmd_scene(args) -> int:
         scene, provider = scene_from_prompt(args.from_prompt, fps=args.fps)
         print(f"scene from {provider}")
     else:
-        scene = Scene.from_dict(json.loads(args.file.read_text()))
+        scene = Scene.from_dict(_json_object(args.file))
 
     if args.place:
         from .scene.place import read_place, stage_in

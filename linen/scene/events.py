@@ -305,4 +305,34 @@ def event_from_dict(data: dict[str, Any]) -> Event:
     try:
         return Event(**payload)
     except TypeError as exc:
-        raise EventError(f"malformed event: {exc}") from None
+        raise EventError(_misfit("event", Event, payload, exc)) from None
+
+
+def _misfit(what: str, cls: type, payload: dict[str, Any], exc: TypeError) -> str:
+    """Say which key is wrong, in the words the scene file uses.
+
+    Quoting the TypeError gives someone editing JSON a sentence about a Python
+    constructor they have never seen. The keys are the thing they wrote, so
+    they are the thing to name — spelled as the file spells them, which is not
+    always how the field is spelled here.
+    """
+    from dataclasses import MISSING, fields
+
+    spelt = {field.name: field.name.rstrip("_") for field in fields(cls)}
+    accepted = ", ".join(sorted(spelt.values()))
+    stray = sorted(set(payload) - set(spelt))
+    if stray:
+        keys = ", ".join(repr(key) for key in stray)
+        return f"{what}: no such field {keys}. {what} fields: {accepted}"
+
+    absent = sorted(
+        spelt[field.name]
+        for field in fields(cls)
+        if field.default is MISSING
+        and field.default_factory is MISSING
+        and field.name not in payload
+    )
+    if absent:
+        keys = ", ".join(repr(key) for key in absent)
+        return f"{what}: {keys} is required. {what} fields: {accepted}"
+    return f"{what}: {exc}"

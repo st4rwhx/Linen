@@ -606,3 +606,70 @@ def test_saving_a_scene_keeps_the_camera_the_props_and_the_events():
     assert [p.name for p in again.props] == ["Couteau"]
     assert {e.kind for e in again.events} == {"camera", "face"}
     again.validate()
+
+
+# --- what the deep audit found: the messages someone editing JSON meets ------
+
+
+def _fails(tmp_path, raw, *, name: str = "ma_scene.scene.json") -> str:
+    """Run the real command line on a broken file and return what it printed."""
+    import contextlib
+    import io
+    import json as _json
+
+    from linen.cli import main
+
+    path = tmp_path / name
+    path.write_text(raw if isinstance(raw, str) else _json.dumps(raw))
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = main(
+            ["scene", str(path), "--planner", "offline", "--no-audio",
+             "-o", str(tmp_path / "out")]
+        )
+    assert code == 1, "this was supposed to fail"
+    return (err.getvalue() or out.getvalue()).strip()
+
+
+_MINIMAL = {
+    "name": "T",
+    "actors": [{"name": "A", "rig": "R15"}],
+    "cues": [{"id": "c", "actor": "A", "at": 0.0, "prompt": "marche", "duration": 1.0}],
+}
+
+
+def test_a_key_that_is_not_a_field_is_named_along_with_the_ones_that_are(tmp_path):
+    """`Event.__init__() got an unexpected keyword argument 'id'` is a sentence
+    about a Python constructor, told to somebody editing JSON."""
+    message = _fails(tmp_path, {**_MINIMAL, "events": [{"kind": "sound", "cue": "c", "id": "9"}]})
+    assert "'id'" in message and "__init__" not in message
+    assert "asset" in message, "the field they meant has to be in the list"
+
+
+def test_a_missing_required_key_is_named_the_same_way(tmp_path):
+    message = _fails(tmp_path, {**_MINIMAL, "events": [{"cue": "c"}]})
+    assert "'kind' is required" in message and "positional argument" not in message
+
+
+def test_a_field_is_spelled_the_way_the_file_spells_it(tmp_path):
+    """`with` is a Python keyword, so the field is `with_`. The file is JSON
+    and has no such problem — offering `with_` sends someone to write it."""
+    message = _fails(tmp_path, {**_MINIMAL, "cues": [{**_MINIMAL["cues"][0], "speed": 2}]})
+    assert "with," in message or message.rstrip().endswith("with")
+    assert "with_" not in message
+
+
+def test_a_file_that_is_not_json_says_which_file_and_where(tmp_path):
+    """`Expecting value: line 1 column 1 (char 0)` names neither."""
+    message = _fails(tmp_path, '{"name": "T", "actors": [{"name":"A"},], "cues": []}')
+    assert "ma_scene.scene.json" in message
+    assert "line 1 column 39" in message
+
+
+def test_an_empty_scene_file_says_it_is_empty(tmp_path):
+    assert "empty" in _fails(tmp_path, "")
+
+
+def test_a_scene_that_is_a_json_list_says_so(tmp_path):
+    message = _fails(tmp_path, "[1, 2, 3]")
+    assert "list" in message and "object" in message
