@@ -311,6 +311,14 @@ def _landmark(entry: Any) -> Landmark:
     )
 
 
+#: How much room a character takes up. An R15 torso is about two studs deep
+#: and a character about five tall, so two roots closer than this in both
+#: senses are two bodies overlapping — while one directly above the other is
+#: somebody on a ledge, which is a scene rather than a mistake.
+BODY_STUDS = 2.0
+BODY_HEIGHT_STUDS = 5.0
+
+
 def stage_in(scene, place: Place) -> list[str]:
     """Move the scene onto the place's real rigs, and say what does not line up.
 
@@ -361,6 +369,24 @@ def stage_in(scene, place: Place) -> list[str]:
             f"{actor.name}: place sur le rig reel a "
             f"({found.position[0]:g}, {found.position[1]:g}, {found.position[2]:g})"
         )
+
+    # Two rigs standing inside each other. Read off a real place: a Hero and
+    # an Enemy a stud and a half apart, which is less than a body is deep. No
+    # staging can fix that from here — a punch thrown at someone already
+    # inside your chest reads as garbage however well it is solved — so it is
+    # said before anything is generated rather than discovered on screen.
+    placed = [
+        (actor.name, np.asarray(actor.position, dtype=float)) for actor in scene.actors
+    ]
+    for index, (name, here) in enumerate(placed):
+        for other, there in placed[index + 1 :]:
+            apart = float(np.linalg.norm((here - there)[[0, 2]]))
+            if apart < BODY_STUDS and abs(here[1] - there[1]) < BODY_HEIGHT_STUDS:
+                notes.append(
+                    f"{name} et {other} sont a {apart:.2f} stud l'un de l'autre — "
+                    f"moins que l'epaisseur d'un corps ({BODY_STUDS:g}). Ils sont "
+                    f"l'un dans l'autre; ecarte-les dans la place avant de generer."
+                )
 
     known = place.names | {actor.name for actor in scene.actors}
     for shot in scene.shots:

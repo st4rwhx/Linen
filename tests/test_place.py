@@ -278,3 +278,41 @@ def test_a_plugins_scratch_object_is_not_offered_as_a_camera_target():
     for needle in ("Gizmo", "Proxy", "MoonAnimator", "MegMo"):
         assert f'"{needle}"' in SURVEY
     assert "Transparency < 1" in SURVEY, "nor anything nobody can see"
+
+
+def test_two_rigs_standing_inside_each_other_are_reported_before_generating():
+    """Read off a real place: a Hero and an Enemy a stud and a half apart.
+
+    An R15 body is about two studs deep, so those two are overlapping. No
+    amount of solving fixes a punch thrown at someone already inside your
+    chest, and it is not visible in a survey — so it is said here, before an
+    evening goes into generating a fight that cannot read.
+    """
+    surveyed = dict(SURVEYED)
+    surveyed["rigs"] = [
+        {"name": "Hero", "rig": "R15", "position": [0, 2.44, 0], "yaw": 0},
+        {"name": "Thug", "rig": "R15", "position": [0, 2.44, -1.5], "yaw": 180},
+    ]
+    notes = stage_in(_scene(), parse_place(json.dumps(surveyed)))
+    assert any("1.50 stud" in note and "l'un dans l'autre" in note for note in notes)
+
+
+def test_two_rigs_a_normal_distance_apart_are_not_reported():
+    """A check that fires on every scene is a check nobody reads."""
+    notes = stage_in(_scene(), parse_place(json.dumps(SURVEYED)))
+    assert not any("l'un dans l'autre" in note for note in notes)
+
+
+def test_standing_on_a_ledge_above_someone_is_not_standing_inside_them():
+    """Overhead is a shot, not a mistake — and it overlaps in plan view.
+
+    Judging this on the horizontal gap alone would fire on every balcony,
+    rooftop and staircase in the game.
+    """
+    surveyed = dict(SURVEYED)
+    surveyed["rigs"] = [
+        {"name": "Hero", "rig": "R15", "position": [0, 2.44, 0], "yaw": 0},
+        {"name": "Thug", "rig": "R15", "position": [0, 22.0, -1.5], "yaw": 180},
+    ]
+    notes = stage_in(_scene(), parse_place(json.dumps(surveyed)))
+    assert not any("l'un dans l'autre" in note for note in notes)
