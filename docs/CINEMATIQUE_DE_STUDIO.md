@@ -54,54 +54,56 @@ film hollywoodien plutôt qu'une caméra de surveillance. »
 
 ---
 
-## 2. Les visages : `FaceControls`, 50 poses FACS
+## 2. Les visages : générés, pas captés
 
-Une **dynamic head** est un `MeshPart` skinné qui porte un objet `FaceControls`.
-Roblox définit **50 poses FACS** de base ; 17 sont obligatoires pour publier une
-tête sur la Marketplace. Plusieurs poses se combinent dans une même image pour
-faire une expression complexe.
+Une **dynamic head** porte un objet `FaceControls` : **50 propriétés nommées**,
+chacune entre 0 et 1, tirées du Facial Action Coding System. Plusieurs se
+combinent dans la même image pour faire une expression complexe. 17 sont
+obligatoires pour publier une tête sur la Marketplace.
 
-Trois façons de les animer, toutes dans Studio :
+Studio sait transformer une **webcam** en images-clés faciales (*Face Capture*,
+en beta dans l'éditeur d'animation). C'est excellent — et **hors sujet ici** :
+ça remet un humain dans la boucle à chaque plan, alors que tout l'intérêt de
+cette chaîne est qu'une scène écrite sorte finie.
 
-1. **À la main** — une valeur FACS par piste, entre 0 et 1 dans l'éditeur
-   d'animation, et ces valeurs vont directement dans `FaceControls`.
-2. **Face Animation Editor** — des curseurs pour composer une expression et la
-   poser sur la timeline.
-3. **Face Capture** — *et c'est la trouvaille* : Roblox lit ta webcam et en fait
-   des images-clés pour une dynamic head. C'est en beta **dans l'éditeur
-   d'animation**, c'est gratuit, et ça ne demande aucun service.
+**Donc le visage est construit à partir de ce que la scène dit déjà.**
 
-Convention : l'image 0 est le visage neutre, les poses commencent à l'image 1,
-une seule pose FACS unique par image.
-
-**Ce que Linen fait :** un événement `face` pose une expression au bon instant,
-par marqueur, ancrée à un temps de la scène. C'est un palier, pas une courbe —
-suffisant pour « il passe en colère ici », plus grossier qu'une vraie captation.
-
-**Le mélange qui donne le meilleur résultat :** Linen place *quand* l'expression
-change, Face Capture fournit *à quoi elle ressemble*.
-
----
-
-## 3. La voix
-
-| | |
+| D'où ça vient | Ce que ça donne |
 | --- | --- |
-| **`AudioTextToSpeech`** | classe **native Roblox**, en beta : du dialogue parlé en temps réel, sans clip pré-enregistré et **sans service tiers** |
-| **`AudioPlayer` + `AudioEmitter`** | la nouvelle API audio. `AudioPlayer` charge et joue, `AudioEmitter` est un haut-parleur virtuel dans l'espace 3D |
-| **2D** | musique, interface, et **voix off de cinématique** — pas d'émetteur, pas d'atténuation |
-| **3D** | une réplique qui vient de la bouche d'un personnage : `AudioEmitter` sur sa tête |
+| un événement `face` | l'expression, en poses FACS pondérées, **fondue** en entrée et en sortie |
+| un événement `line` | la mâchoire et les lèvres traversent les **syllabes du texte** |
+| rien du tout | ça **cligne des yeux**, décalé par acteur |
 
-Le lip-sync automatique depuis l'audio n'est pas encore une fonction livrée ;
-c'est un sujet ouvert sur le forum. En attendant, les poses FACS de mâchoire
-posées sur les syllabes font le travail.
+**Une expression est une courbe, pas un interrupteur.** Un visage posé sur une
+expression et laissé là se lit comme un masque. Et chaque contrôle que
+l'expression précédente utilisait est **ramené à zéro** — sinon un sourcil levé
+il y a trois temps est encore levé sous un sourire, et le visage s'accumule
+lentement en grimace.
 
-**Ce que Linen fait :** chaque son est un `KeyframeMarker` **dans l'animation**,
-donc à l'image près et solidaire du clip — si tu retimes le clip dans Studio, le
-son suit. La feuille de spotting (`<Scene>.audio.json`) liste chaque son dont la
-scène a besoin, avec sa description ; tu colles un `rbxassetid://` en face.
+**Le lip-sync vient du texte, pas de l'audio.** Il n'y a pas encore d'audio
+quand la scène est construite, et `AudioTextToSpeech` lira exactement le même
+texte. Six visèmes — ouvert, large, arrondi, fermé, dents, consonne — parce que
+c'est ce que l'animation utilise depuis Disney : à 24 images par seconde
+personne n'en voit davantage.
 
----
+> Pourquoi piloté image par image et pas écrit dans le `.rbxmx` : **la façon
+> dont un `KeyframeSequence` stocke des pistes faciales n'est documentée nulle
+> part** où on puisse la vérifier. Deviner un format de fichier, c'est livrer
+> quelque chose qui s'importe et ne fait rien. `FaceControls` est une classe
+> documentée ; on écrit dedans.
+
+## 3. La voix : native, sans rien enregistrer
+
+`AudioTextToSpeech` est une **classe Roblox** en beta : du dialogue parlé, sans
+clip pré-enregistré et **sans service tiers**. Une réplique de la scène devient
+une voix, câblée à un `AudioEmitter` sur la tête du personnage — donc
+positionnelle, elle vient d'où il est.
+
+Et la bouche bouge déjà sur **le même texte**. Rien à synchroniser à la main :
+les deux sont générés de la même phrase.
+
+Si la classe est désactivée sur ta place, la réplique reste affichée à l'écran
+et le script le dit, au lieu de jouer un silence.
 
 ## 4. Ce qu'aucune des trois briques ne donne, et que Linen fait
 

@@ -80,6 +80,21 @@ def scene_script(
             lines.append(f'\t["{_escape(actor.name)}"] = "{_escape(asset)}",')
     lines.append("}")
     lines.append("")
+    # The facial performance, generated: expressions eased, mouths driven from
+    # the dialogue's own syllables, blinks underneath. Driven per frame rather
+    # than written into the animation, because how a KeyframeSequence stores
+    # facial tracks is not documented anywhere this could be checked against.
+    lines.append("local FACES: { [string]: { { at: number, control: string, value: number } } } = {")
+    for actor, track in sorted(getattr(built, "faces", {}).items()):
+        lines.append(f'\t["{_escape(actor)}"] = {{')
+        for key in sorted(track.keys, key=lambda k: (k.at, k.control)):
+            lines.append(
+                f'\t\t{{ at = {key.at:.3f}, control = "{_escape(key.control)}", '
+                f"value = {key.value:.3f} }},"
+            )
+        lines.append("\t},")
+    lines.append("}")
+    lines.append("")
     lines.append("-- Cue sheet, for reference when retiming by hand.")
     lines.append(
         "local CUES: { { id: string, actor: string, start: number, stop: number, "

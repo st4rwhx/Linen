@@ -276,34 +276,96 @@ end
 -- FaceControls is a 50-pose FACS rig on a dynamic head. Named expressions keep
 -- a scene readable; a blocky head simply has no FaceControls and is skipped,
 -- which is why this never errors.
-local function setExpression(actorName: string, name: string, hold: number)
+--[[ The face is a curve, not a switch. Expressions ease in and out, a spoken
+     line drives the jaw through its own syllables, and blinks run underneath —
+     all of it generated from what the scene says, none of it captured. A face
+     set to a pose and left there reads as a mask; a face that never blinks
+     reads as a corpse. ]]
+local faceControls: { [string]: any } = {}
+local faceCursor: { [string]: number } = {}
+
+local function findFace(actorName: string): any
+\tif faceControls[actorName] ~= nil then
+\t\treturn faceControls[actorName]
+\tend
 \tlocal model = models[actorName]
 \tlocal head = model and model:FindFirstChild("Head")
 \tlocal controls = head and head:FindFirstChildOfClass("FaceControls")
-\tif controls == nil then
-\t\treturn
-\tend
-\tlocal pose = EXPRESSIONS[name]
-\tif pose == nil then
-\t\treturn
-\tend
-\tfor property, value in pose do
-\t\tpcall(function()
-\t\t\t(controls :: any)[property] = value
-\t\tend)
-\tend
-\tif hold > 0 then
-\t\ttask.delay(hold, function()
-\t\t\tfor property in pose do
+\tfaceControls[actorName] = controls or false
+\treturn controls
+end
+
+--[[ Between two keys on the same control, eased rather than stepped. The keys
+     were generated with their own approach times, so a plain smoothstep here
+     is enough — the shaping is in where the keys are, not in this curve. ]]
+local function driveFaces(elapsed: number)
+\tfor actorName, keys in FACES do
+\t\tlocal controls = findFace(actorName)
+\t\tif not controls then
+\t\t\tcontinue
+\t\tend
+\t\tlocal current: { [string]: number } = {}
+\t\tlocal previous: { [string]: { at: number, value: number } } = {}
+\t\tfor _, key in keys do
+\t\t\tif key.at <= elapsed then
+\t\t\t\tprevious[key.control] = { at = key.at, value = key.value }
+\t\t\t\tcurrent[key.control] = key.value
+\t\t\telse
+\t\t\t\tlocal before = previous[key.control]
+\t\t\t\tif before ~= nil and current[key.control] == before.value then
+\t\t\t\t\tlocal span = key.at - before.at
+\t\t\t\t\tif span > 1e-4 then
+\t\t\t\t\t\tlocal t = math.clamp((elapsed - before.at) / span, 0, 1)
+\t\t\t\t\t\tcurrent[key.control] = before.value
+\t\t\t\t\t\t\t+ (key.value - before.value) * (t * t * (3 - 2 * t))
+\t\t\t\t\tend
+\t\t\t\t\tcurrent[key.control .. "@done"] = 1
+\t\t\t\tend
+\t\t\tend
+\t\tend
+\t\tfor property, value in current do
+\t\t\tif string.find(property, "@") == nil then
 \t\t\t\tpcall(function()
-\t\t\t\t\t(controls :: any)[property] = 0
+\t\t\t\t\t(controls :: any)[property] = math.clamp(value, 0, 1)
 \t\t\t\tend)
 \t\t\tend
-\t\tend)
+\t\tend
+\t\tfaceCursor[actorName] = elapsed
 \tend
 end
 
--- ------------------------------------------------------------------- line --
+--[[ A line is spoken, not just printed. `AudioTextToSpeech` is a Roblox class,
+     so the voice needs no recording and no third party — and the mouth is
+     already moving to the same text, generated from its syllables. ]]
+local function say(actorName: string, text: string)
+\tlocal model = models[actorName]
+\tlocal head = model and model:FindFirstChild("Head")
+\tif head == nil or not head:IsA("BasePart") then
+\t\treturn
+\tend
+\tlocal ok = pcall(function()
+\t\tlocal speech = Instance.new("AudioTextToSpeech")
+\t\tspeech.Text = text
+\t\tspeech.Parent = head
+\t\tlocal emitter = Instance.new("AudioEmitter")
+\t\temitter.Parent = head
+\t\tlocal wire = Instance.new("Wire")
+\t\twire.SourceInstance = speech
+\t\twire.TargetInstance = emitter
+\t\twire.Parent = head
+\t\tspeech:Play()
+\t\ttask.delay(10, function()
+\t\t\tspeech:Destroy()
+\t\t\temitter:Destroy()
+\t\t\twire:Destroy()
+\t\tend)
+\tend)
+\tif not ok then
+\t\t-- The class is in beta; where it is off, the line still shows on screen.
+\t\twarn(`Linen: AudioTextToSpeech indisponible, "{text}" reste en texte`)
+\tend
+end
+
 local function showLine(actorName: string, text: string, hold: number)
 \tlocal model = models[actorName]
 \tlocal head = model and model:FindFirstChild("Head")
@@ -431,9 +493,11 @@ local function fire(kind: string, value: string, actorName: string?)
 \telseif kind == "vfx" then
 \t\tplayEffect(parts[1] or "", parts[2] or "")
 \telseif kind == "face" then
-\t\tsetExpression(actorName or "", parts[1] or "", tonumber(parts[2]) or 2)
+\t\t-- Nothing to do: the expression is already in FACES, eased, and driven
+\t\t-- every frame. Setting it here as well would fight the curve.
 \telseif kind == "line" then
 \t\tshowLine(actorName or "", parts[1] or "", tonumber(parts[2]) or 2)
+\t\tsay(actorName or "", parts[1] or "")
 \telseif kind == "camera" then
 \t\tcutTo(parts[1] or "")
 \telseif kind == "prop" then
@@ -532,6 +596,7 @@ task.spawn(function()
 \tlocal next_ = 1
 \twhile next_ <= #DIRECTOR do
 \t\telapsed += RunService.Heartbeat:Wait()
+\t\tdriveFaces(elapsed)
 \t\twhile next_ <= #DIRECTOR and DIRECTOR[next_].at <= elapsed do
 \t\t\tlocal cue = DIRECTOR[next_]
 \t\t\tfire(cue.kind, cue.value, cue.actor)

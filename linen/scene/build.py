@@ -60,6 +60,8 @@ class BuiltScene:
     #: Events with no actor — camera cuts, world effects — on the director's
     #: clock, in seconds.
     director: list[tuple[float, object]] = field(default_factory=list)
+    #: actor -> the generated facial performance, as FACS keys.
+    faces: dict = field(default_factory=dict)
     #: What each contact actually achieved, in studs. A reach that fell short
     #: is reported rather than absorbed: an arm has a fixed length.
     reaches: list = field(default_factory=list)
@@ -87,6 +89,10 @@ def build_scene(
     clips = _splice(scene, schedule, seed)
     markers, director = _place_events(scene, schedule)
     reaches = _solve_contacts(scene, schedule, clips)
+    from .face import build_faces
+
+    total = max((entry.end for entry in schedule), default=0.0)
+    faces = build_faces(scene, schedule, total)
     return BuiltScene(
         scene=scene,
         clips=clips,
@@ -94,6 +100,7 @@ def build_scene(
         markers=markers,
         director=director,
         reaches=reaches,
+        faces=faces,
     )
 
 
